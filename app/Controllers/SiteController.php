@@ -43,6 +43,8 @@ final class SiteController
             'site'    => $site,
             'snippet' => self::snippet((string) $site['public_id']),
             'ok'      => Session::getFlash('ok'),
+            'error'   => Session::getFlash('error'),
+            'runs'    => \App\Models\ReportRun::recentForSite((int) $site['id'], 6),
         ]));
     }
 

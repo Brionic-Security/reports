@@ -8,6 +8,8 @@ each client a branded weekly traffic report by email. No cookies, no cookie
 banner, no raw IP addresses stored.
 
 > Built by [Brionic Security](https://brionicsecurity.com). Contributions welcome — see [CONTRIBUTING.md](CONTRIBUTING.md).
+>
+> **Official hosted instance:** <https://reports.brionicsecurity.com>
 
 ## Why
 
@@ -60,6 +62,30 @@ you into that site's `<head>`:
 window.brionic('event', 'checkout_started');
 ```
 
+## Client reports
+
+Each site can have a **client report email**. Brionic Reports generates a branded
+traffic summary (unique visitors, page views, top pages, referrers, countries,
+devices) and emails it to that client — the automated "weekly visit report".
+
+From a site's **Settings** page you can *Preview* the report, *Send a test to
+yourself*, or *Send to the client now*. To send automatically, add a cron:
+
+```bash
+# Weekly, Mondays at 07:00 — reports the previous 7 days.
+0 7 * * 1  php /path/to/reports/scripts/send_reports.php >> storage/logs/reports.log 2>&1
+```
+
+```bash
+php scripts/send_reports.php               # all sites with a client email
+php scripts/send_reports.php --days=30     # 30-day period
+php scripts/send_reports.php --site=3      # a single site
+php scripts/send_reports.php --test=you@example.com --site=3   # preview-send to an address
+```
+
+Reports use the mail driver in `.env` (`log` for dev, `smtp` for production). A
+site is only sent one report per period (the runner de-duplicates).
+
 ## Production (shared hosting / SiteGround, etc.)
 
 1. Create a subdomain (e.g. `reports.example.com`) and point its **document root
@@ -90,7 +116,7 @@ no front-end build. MIT licensed.
 
 - [x] Multi-site collector + dashboard
 - [x] Bot filtering, geo, devices, referrers, custom events
-- [ ] Weekly client report emails (SMTP)
+- [x] Weekly client report emails (SMTP)
 - [ ] Traffic alerts (spikes/drops)
 - [ ] Plugin modules (uptime, Trustpilot, etc.)
 - [ ] Multi-user / team accounts

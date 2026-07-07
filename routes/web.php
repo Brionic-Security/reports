@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Controllers\AuthController;
 use App\Controllers\CollectController;
 use App\Controllers\DashboardController;
+use App\Controllers\ReportController;
 use App\Controllers\SiteController;
 use App\Support\Response;
 use App\Support\Router;
@@ -35,5 +36,10 @@ return function (Router $router): void {
         $r->get('/sites/{id}/settings', [SiteController::class, 'show']);
         $r->post('/sites/{id}', [SiteController::class, 'update'], ['csrf']);
         $r->post('/sites/{id}/delete', [SiteController::class, 'destroy'], ['csrf']);
+
+        // Client traffic reports.
+        $r->get('/sites/{id}/report', [ReportController::class, 'preview']);
+        $r->post('/sites/{id}/report/send', [ReportController::class, 'send'], ['csrf']);
+        $r->post('/sites/{id}/report/test', [ReportController::class, 'test'], ['csrf']);
     });
 };
