@@ -1,0 +1,29 @@
+# Brionic Reports — Apache config for shared hosting (e.g. SiteGround).
+# Document root should point at this /public directory.
+
+RewriteEngine On
+
+# Force HTTPS.
+RewriteCond %{HTTPS} !=on
+RewriteCond %{HTTP:X-Forwarded-Proto} !https
+RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+
+# Serve real files/directories directly (b.js, assets, etc.).
+RewriteCond %{REQUEST_FILENAME} -f [OR]
+RewriteCond %{REQUEST_FILENAME} -d
+RewriteRule ^ - [L]
+
+# Everything else → front controller.
+RewriteRule ^ index.php [L]
+
+# Long cache for the tracker + static assets.
+<IfModule mod_expires.c>
+  ExpiresActive On
+  ExpiresByType application/javascript "access plus 1 day"
+  ExpiresByType text/css "access plus 1 month"
+</IfModule>
+
+# Block dotfiles.
+<FilesMatch "^\.">
+  Require all denied
+</FilesMatch>

@@ -1,0 +1,13 @@
+# Ignore everything that shouldn't be committed.
+/vendor/
+.env
+.DS_Store
+*.log
+
+# Local database + runtime storage (keep the folders via .gitkeep).
+/storage/database.sqlite
+/storage/database.sqlite-*
+/storage/logs/*
+/storage/cache/*
+!/storage/logs/.gitkeep
+!/storage/cache/.gitkeep
