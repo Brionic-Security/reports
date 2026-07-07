@@ -39,13 +39,43 @@ final class ReportService
     }
 
     /**
-     * Build the report data for a site and period.
+     * Build the report data for a site and period, including a zero-filled
+     * per-day series covering the whole window (for the chart).
      *
      * @return array<string,mixed>
      */
     public static function data(int $siteId, string $from, string $to): array
     {
-        return Stats::forSite($siteId, 'custom', $from, $to);
+        $data = Stats::forSite($siteId, 'custom', $from, $to);
+        $data['series'] = self::fillDays($from, $to, $data['by_day'] ?? []);
+        return $data;
+    }
+
+    /**
+     * Expand a sparse by-day list into one entry per calendar day in [from,to].
+     *
+     * @param array<int,array{date:string,humans:int,bots:int}> $byDay
+     * @return array<int,array{date:string,humans:int,bots:int}>
+     */
+    private static function fillDays(string $from, string $to, array $byDay): array
+    {
+        $map = [];
+        foreach ($byDay as $d) {
+            $map[substr((string) $d['date'], 0, 10)] = $d;
+        }
+        $out = [];
+        $cur = strtotime($from);
+        $end = strtotime($to);
+        // Cap at 92 days so a huge custom range can't explode the chart.
+        for ($i = 0; $cur <= $end && $i < 92; $cur = strtotime('+1 day', $cur), $i++) {
+            $key = date('Y-m-d', $cur);
+            $out[] = [
+                'date'   => $key,
+                'humans' => (int) ($map[$key]['humans'] ?? 0),
+                'bots'   => (int) ($map[$key]['bots'] ?? 0),
+            ];
+        }
+        return $out;
     }
 
     /** Rendered HTML of the report (for on-screen preview). */
