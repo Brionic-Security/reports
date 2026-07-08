@@ -86,6 +86,17 @@ php scripts/send_reports.php --test=you@example.com --site=3   # preview-send to
 Reports use the mail driver in `.env` (`log` for dev, `smtp` for production). A
 site is only sent one report per period (the runner de-duplicates).
 
+## Traffic alerts
+
+Get emailed when a site's traffic spikes or drops. `check_alerts.php` compares
+yesterday's human page views to the average of the prior 7 days and emails the
+operator (thresholds in `config/alerts.php`). Add a daily cron:
+
+```bash
+# Daily at 08:00
+0 8 * * *  php /path/to/reports/scripts/check_alerts.php >> storage/logs/alerts.log 2>&1
+```
+
 ## Production (shared hosting / SiteGround, etc.)
 
 1. Create a subdomain (e.g. `reports.example.com`) and point its **document root
@@ -117,7 +128,7 @@ no front-end build. MIT licensed.
 - [x] Multi-site collector + dashboard
 - [x] Bot filtering, geo, devices, referrers, custom events
 - [x] Weekly client report emails (SMTP)
-- [ ] Traffic alerts (spikes/drops)
+- [x] Traffic alerts (spikes/drops)
 - [ ] Plugin modules (uptime, Trustpilot, etc.)
 - [ ] Multi-user / team accounts
 
