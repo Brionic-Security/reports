@@ -119,3 +119,14 @@ h2 { font-size: 1.15rem; margin: 0 0 14px; }
 .mt { margin-top: 22px; }
 .muted { color: var(--muted); }
 .right { text-align: right; }
+
+/* Trend delta badges */
+.delta { font-size: .62rem; font-weight: 700; padding: 1px 6px; border-radius: 999px; margin-left: 6px; white-space: nowrap; }
+.delta.up { background: rgba(46,211,167,.16); color: var(--green); }
+.delta.down { background: rgba(217,43,50,.18); color: #f2a3ad; }
+.delta.flat { background: var(--panel-2); color: var(--muted); }
+
+/* Visitor map */
+.geo-map { background: #0e1118; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; margin-top: 8px; }
+.geo-map svg { display: block; width: 100%; height: auto; }
+.geo-map circle { filter: drop-shadow(0 0 3px rgba(217,43,50,.7)); }

@@ -65,12 +65,38 @@ final class Stats
             $bp
         )['c'] ?? 0);
 
+        // Previous equal-length window (for the % change), when a start exists.
+        $prev = null;
+        if ($df !== null) {
+            $endTs = $dt !== null ? strtotime($dt) : time();
+            $len = $endTs - strtotime($df);
+            if ($len > 0) {
+                $prevFrom = gmdate('Y-m-d H:i:s', strtotime($df) - $len);
+                $prev = self::periodCounts($siteId, $prevFrom, $df);
+            }
+        }
+
         return [
             'pageviews'   => $humanPv,
             'visitors'    => (int) ($totals['visitors'] ?? 0),
             'bots'        => (int) ($totals['bots'] ?? 0),
             'total'       => (int) ($totals['total'] ?? 0),
+            'prev'        => $prev,
             'by_day'      => self::byDay($base, $bp),
+            'map'         => Database::select(
+                "SELECT ROUND(lat, 1) rlat, ROUND(lon, 1) rlon,
+                        MAX(country) country, MAX(city) city,
+                        COUNT(DISTINCT visitor_hash) n
+                 FROM events WHERE {$human} AND lat IS NOT NULL
+                 GROUP BY ROUND(lat, 1), ROUND(lon, 1) ORDER BY n DESC LIMIT 250",
+                $bp
+            ),
+            'cities'      => Database::select(
+                "SELECT city, MAX(country) country, COUNT(DISTINCT visitor_hash) n
+                 FROM events WHERE {$human} AND city <> ''
+                 GROUP BY city ORDER BY n DESC LIMIT 10",
+                $bp
+            ),
             'top_pages'   => Database::select(
                 "SELECT path, COUNT(*) n FROM events WHERE {$human} AND type = 'pageview'
                  GROUP BY path ORDER BY n DESC LIMIT 12",
@@ -152,5 +178,21 @@ final class Stats
             $params[] = $dt;
         }
         return [$conds === [] ? '1 = 1' : implode(' AND ', $conds), $params];
+    }
+
+    /** Human visitors + page views over an explicit [from, to) window. */
+    private static function periodCounts(int $siteId, string $from, string $to): array
+    {
+        $row = Database::selectOne(
+            "SELECT COUNT(DISTINCT visitor_hash) visitors,
+                    SUM(CASE WHEN type = 'pageview' THEN 1 ELSE 0 END) pageviews
+             FROM events
+             WHERE site_id = ? AND is_bot = 0 AND created_at >= ? AND created_at < ?",
+            [$siteId, $from, $to]
+        ) ?? [];
+        return [
+            'visitors'  => (int) ($row['visitors'] ?? 0),
+            'pageviews' => (int) ($row['pageviews'] ?? 0),
+        ];
     }
 }

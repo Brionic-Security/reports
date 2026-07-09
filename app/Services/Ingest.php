@@ -39,8 +39,8 @@ final class Ingest
         Database::insert(
             'INSERT INTO events
                 (site_id, type, name, path, referer_host, is_bot, bot_name,
-                 browser, os, device, country, city, visitor_hash, created_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                 browser, os, device, country, city, country_code, lat, lon, visitor_hash, created_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
             [
                 (int) $site['id'],
                 $type === 'event' ? 'event' : 'pageview',
@@ -54,6 +54,9 @@ final class Ingest
                 self::device($ua['device'], $screen),
                 $geo['country'] ?? '',
                 $geo['city'] ?? '',
+                $geo['country_code'] ?? '',
+                $geo['lat'] ?? null,
+                $geo['lon'] ?? null,
                 self::visitorHash((int) $site['id'], $ip, $userAgent),
                 now(),
             ]
