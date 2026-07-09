@@ -15,6 +15,7 @@ final class Email
 {
     private const RED = '#d92b32';
     private const GOLD = '#c9a23c';
+    private const GREEN = '#2ed3a7';
     private const DARK = '#15171c';
     private const INK = '#1c2129';
     private const MUTED = '#6b7280';
@@ -32,36 +33,53 @@ final class Email
         $domain = self::esc((string) $site['domain']);
         $favicon = 'https://www.google.com/s2/favicons?domain=' . rawurlencode((string) $site['domain']) . '&sz=64';
 
-        // Hero: favicon + big site title + domain + period.
-        $hero = '<table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 22px;"><tr>'
+        $visitors  = (int) ($data['visitors'] ?? 0);
+        $pageviews = (int) ($data['pageviews'] ?? 0);
+        $bots      = (int) ($data['bots'] ?? 0);
+        $alltime   = (int) ($data['alltime'] ?? 0);
+
+        $hero = '<table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 20px;"><tr>'
             . '<td width="58" valign="middle" style="padding-right:14px;">'
             . '<img src="' . self::esc($favicon) . '" width="46" height="46" alt="" style="display:block;border-radius:10px;border:1px solid ' . self::LINE . ';background:#f1f2f5;">'
-            . '</td>'
-            . '<td valign="middle">'
+            . '</td><td valign="middle">'
             . '<div style="font-size:27px;font-weight:800;color:' . self::INK . ';line-height:1.15;">' . $name . '</div>'
             . '<div style="font-size:14px;color:' . self::MUTED . ';">' . $domain . ' &middot; ' . self::esc($periodLabel) . '</div>'
             . '</td></tr></table>';
 
+        // Prepend flag emoji to each country.
+        $countries = array_map(fn ($r) => [
+            'country' => self::flag((string) ($r['cc'] ?? '')) . (string) $r['country'],
+            'n' => (int) $r['n'],
+        ], $data['countries'] ?? []);
+
         $body = $hero
-            . self::stats([
-                ['Unique visitors', (int) $data['visitors'], self::RED],
-                ['Page views', (int) $data['pageviews'], self::GOLD],
+            . self::metrics([
+                ['Page views', $pageviews, self::RED],
+                ['Unique visitors', $visitors, self::GOLD],
+                ['Bot hits', $bots, '#b45309'],
+                ['All-time views', $alltime, self::INK],
             ])
+            . self::splitBar($pageviews, $bots)
             . self::dayChart($data['series'] ?? [])
-            . self::listSection('Top pages', $data['top_pages'], 'path', 'n')
             . self::twoCol(
-                self::listSection('Where visitors came from', $data['referrers'], 'referer_host', 'n', 5, true),
-                self::listSection('Top countries', $data['countries'], 'country', 'n', 5, true)
+                self::listSection('Top countries', $countries, 'country', 'n', 6, true),
+                self::listSection('Top cities', $data['cities'] ?? [], 'city', 'n', 6, true)
             )
             . self::twoCol(
-                self::listSection('Devices', $data['devices'], 'label', 'n', 5, true),
-                self::listSection('Browsers', $data['browsers'], 'label', 'n', 5, true)
+                self::segSection('Devices', $data['devices'] ?? []),
+                self::listSection('Browsers', $data['browsers'] ?? [], 'label', 'n', 6, true)
             )
-            . self::pMuted('This is an automated report from ' . self::esc((string) config('app.name')) . '. Numbers exclude bots and crawlers.');
+            . self::twoCol(
+                self::listSection('Top pages', $data['top_pages'] ?? [], 'path', 'n', 6, true),
+                self::listSection('Where visitors came from', $data['referrers'] ?? [], 'referer_host', 'n', 6, true)
+            )
+            . (!empty($data['events']) ? self::listSection('Custom events', $data['events'], 'name', 'n', 6) : '')
+            . self::pMuted('Automated report from ' . self::esc((string) config('app.name'))
+                . '. Human figures exclude bots &amp; crawlers; uniques use a privacy-friendly daily hash &mdash; no cookies, no stored IPs.');
 
         $subject = 'Website report for ' . (string) $site['name'] . ' — ' . $periodLabel;
         $text = "Traffic summary for {$site['name']} ({$site['domain']}) — {$periodLabel}\n\n"
-            . "Unique visitors: {$data['visitors']}\nPage views: {$data['pageviews']}\n";
+            . "Page views: {$pageviews}\nUnique visitors: {$visitors}\nBot hits: {$bots}\nAll-time page views: {$alltime}\n";
 
         return self::shell($subject, $body, $text);
     }
@@ -182,6 +200,80 @@ final class Email
         }
         return '<h2 style="margin:' . ($compact ? '18px' : '22px') . ' 0 4px;font-size:13px;color:' . self::MUTED . ';text-transform:uppercase;letter-spacing:.08em;">' . self::esc($title) . '</h2>'
             . '<table role="presentation" width="100%" cellpadding="0" cellspacing="0">' . $lines . '</table>';
+    }
+
+    /** Regional-indicator flag emoji for a 2-letter country code (or ''). */
+    private static function flag(string $cc): string
+    {
+        $cc = strtoupper(trim($cc));
+        if (strlen($cc) !== 2 || !ctype_alpha($cc)) {
+            return '';
+        }
+        return mb_chr(0x1F1E6 + ord($cc[0]) - 65) . mb_chr(0x1F1E6 + ord($cc[1]) - 65) . ' ';
+    }
+
+    /** A 2x2 grid of headline metrics. @param array<int,array{0:string,1:int,2:string}> $items */
+    private static function metrics(array $items): string
+    {
+        $rows = '';
+        foreach (array_chunk($items, 2) as $pair) {
+            $cells = '';
+            foreach ($pair as [$label, $value, $color]) {
+                $cells .= '<td width="50%" align="center" style="padding:16px 10px;background:#f7f8fa;border-radius:12px;">'
+                    . '<div style="font-size:34px;font-weight:800;color:' . $color . ';line-height:1;">' . self::esc((string) num((int) $value)) . '</div>'
+                    . '<div style="font-size:12px;color:' . self::MUTED . ';text-transform:uppercase;letter-spacing:.06em;margin-top:5px;">' . self::esc($label) . '</div>'
+                    . '</td>';
+            }
+            $rows .= '<tr>' . $cells . '</tr>';
+        }
+        return '<table role="presentation" width="100%" cellpadding="0" cellspacing="8" style="margin:0 0 8px;">' . $rows . '</table>';
+    }
+
+    /** A humans-vs-bots split bar with legend. */
+    private static function splitBar(int $human, int $bot): string
+    {
+        $tot = $human + $bot;
+        if ($tot <= 0) {
+            return '';
+        }
+        $hp = (int) round($human / $tot * 100);
+        $bp = 100 - $hp;
+        $bar = '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-radius:8px;overflow:hidden;margin:4px 0 6px;"><tr>'
+            . ($hp > 0 ? '<td width="' . $hp . '%" style="background:' . self::GREEN . ';height:20px;font-size:0;line-height:0;">&nbsp;</td>' : '')
+            . ($bp > 0 ? '<td width="' . $bp . '%" style="background:' . self::GOLD . ';height:20px;font-size:0;line-height:0;">&nbsp;</td>' : '')
+            . '</tr></table>';
+        $legend = '<div style="font-size:12px;color:' . self::MUTED . ';">'
+            . '<span style="color:' . self::GREEN . ';">&#9632;</span> Humans ' . num($human) . ' (' . $hp . '%)&nbsp;&nbsp;'
+            . '<span style="color:' . self::GOLD . ';">&#9632;</span> Bots ' . num($bot) . ' (' . $bp . '%)</div>';
+        return '<h2 style="margin:20px 0 6px;font-size:13px;color:' . self::MUTED . ';text-transform:uppercase;letter-spacing:.08em;">Humans vs bots</h2>' . $bar . $legend;
+    }
+
+    /** A colored segmented bar for devices. @param array<int,array<string,mixed>> $rows */
+    private static function segSection(string $title, array $rows): string
+    {
+        if (!$rows) {
+            return self::listSection($title, $rows, 'label', 'n', 6, true);
+        }
+        $colors = ['Desktop' => '#4f9dff', 'Mobile' => self::GREEN, 'Tablet' => '#af7bff', 'Unknown' => '#9aa3b2'];
+        $tot = 0;
+        foreach ($rows as $r) {
+            $tot += (int) $r['n'];
+        }
+        $tot = max(1, $tot);
+        $seg = '';
+        $legend = '';
+        foreach ($rows as $r) {
+            $label = (string) ($r['label'] ?? 'Unknown');
+            $c = $colors[$label] ?? '#9aa3b2';
+            $pc = (int) round((int) $r['n'] / $tot * 100);
+            if ($pc > 0) {
+                $seg .= '<td width="' . $pc . '%" style="background:' . $c . ';height:20px;font-size:0;line-height:0;">&nbsp;</td>';
+            }
+            $legend .= '<span style="white-space:nowrap;margin-right:12px;"><span style="color:' . $c . ';">&#9632;</span> ' . self::esc($label) . ' ' . $pc . '%</span> ';
+        }
+        return '<h2 style="margin:18px 0 6px;font-size:13px;color:' . self::MUTED . ';text-transform:uppercase;letter-spacing:.08em;">' . self::esc($title) . '</h2>'
+            . '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-radius:8px;overflow:hidden;"><tr>' . $seg . '</tr></table>'
+            . '<div style="font-size:12px;color:' . self::MUTED . ';margin-top:7px;line-height:1.9;">' . $legend . '</div>';
     }
 
     // ── shell + helpers ───────────────────────────────────────────────────────

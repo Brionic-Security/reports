@@ -48,6 +48,10 @@ final class ReportService
     {
         $data = Stats::forSite($siteId, 'custom', $from, $to);
         $data['series'] = self::fillDays($from, $to, $data['by_day'] ?? []);
+        $data['alltime'] = (int) (\App\Support\Database::selectOne(
+            "SELECT COUNT(*) c FROM events WHERE site_id = ? AND type = 'pageview' AND is_bot = 0",
+            [$siteId]
+        )['c'] ?? 0);
         return $data;
     }
 
@@ -87,7 +91,25 @@ final class ReportService
     }
 
     /**
-     * Send a report for one site.
+     * Parse a recipients string (commas / semicolons / whitespace / newlines)
+     * into a de-duplicated list of valid email addresses.
+     *
+     * @return array<int,string>
+     */
+    public static function recipients(string $raw): array
+    {
+        $out = [];
+        foreach (preg_split('/[\s,;]+/', trim($raw)) ?: [] as $p) {
+            $p = trim($p);
+            if ($p !== '' && filter_var($p, FILTER_VALIDATE_EMAIL)) {
+                $out[strtolower($p)] = $p;
+            }
+        }
+        return array_values($out);
+    }
+
+    /**
+     * Send a report for one site to all configured recipients.
      *
      * @param array<string,mixed> $site
      * @return string one of: sent | skipped | no_email | failed
@@ -97,12 +119,12 @@ final class ReportService
         $p = self::period($days);
         $siteId = (int) $site['id'];
 
-        $recipient = $override ?? (string) ($site['report_email'] ?? '');
-        if ($recipient === '') {
+        $recipients = self::recipients($override ?? (string) ($site['report_email'] ?? ''));
+        if (!$recipients) {
             return 'no_email';
         }
 
-        // Dedupe: don't re-send the same period to the client (overrides/tests bypass).
+        // Dedupe: don't re-send the same period to clients (overrides/tests bypass).
         if (!$force && $override === null && ReportRun::sentExists($siteId, $p['from'])) {
             return 'skipped';
         }
@@ -110,15 +132,16 @@ final class ReportService
         $data = self::data($siteId, $p['from'], $p['to']);
         $msg = Email::report($site, $data, $p['label']);
 
-        $ok = Mailer::send($recipient, $msg['subject'], $msg['html'], $msg['text'], (string) $site['name']);
-        $status = $ok ? 'sent' : 'failed';
-
-        // Only log real client sends against the dedupe key (not tests to the operator).
-        if ($override === null) {
-            ReportRun::record($siteId, $p['from'], $p['to'], $recipient, $status);
+        $anyOk = false;
+        foreach ($recipients as $r) {
+            $anyOk = Mailer::send($r, $msg['subject'], $msg['html'], $msg['text'], (string) $site['name']) || $anyOk;
         }
 
-        return $ok ? 'sent' : 'failed';
+        if ($override === null) {
+            ReportRun::record($siteId, $p['from'], $p['to'], implode(', ', $recipients), $anyOk ? 'sent' : 'failed');
+        }
+
+        return $anyOk ? 'sent' : 'failed';
     }
 
     /**

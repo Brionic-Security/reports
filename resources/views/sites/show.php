@@ -29,7 +29,7 @@ $this->layout('layout', ['title' => $site['name'] . ' settings · Brionic Report
       <?= csrf_field() ?>
       <div class="field"><label>Name</label><input class="input" name="name" value="<?= e($site['name']) ?>" required></div>
       <div class="field"><label>Domain</label><input class="input" name="domain" value="<?= e($site['domain']) ?>" required></div>
-      <div class="field"><label>Client report email</label><input class="input" type="email" name="report_email" value="<?= e($site['report_email'] ?? '') ?>" placeholder="client@acme.com"></div>
+      <div class="field"><label>Weekly report recipients <span class="muted">(one email per line)</span></label><textarea class="input" name="report_email" rows="3" placeholder="client@acme.com&#10;you@agency.com"><?= e($site['report_email'] ?? '') ?></textarea></div>
       <button class="btn btn-primary" type="submit">Save</button>
     </form>
     <hr style="border:none;border-top:1px solid var(--line);margin:18px 0">
@@ -43,9 +43,10 @@ $this->layout('layout', ['title' => $site['name'] . ' settings · Brionic Report
 <div class="card mt">
   <h2>Weekly client report</h2>
   <p class="muted" style="margin-top:0">
-    A branded traffic summary emailed to the client
-    <?php if (!empty($site['report_email'])): ?>at <strong><?= e($site['report_email']) ?></strong><?php else: ?><span class="badge bot">no client email set</span><?php endif; ?>.
-    Sent automatically each week when the cron is configured.
+    <?php $recips = \App\Services\ReportService::recipients((string) ($site['report_email'] ?? '')); ?>
+    A branded traffic summary emailed each week
+    <?php if ($recips): ?>to <strong><?= e(implode(', ', $recips)) ?></strong><?php else: ?><span class="badge bot">no recipients set</span><?php endif; ?>.
+    Runs automatically when the cron is configured.
   </p>
   <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
     <a class="btn btn-sm" href="<?= app_url('sites/' . $site['id'] . '/report') ?>" target="_blank">Preview report</a>

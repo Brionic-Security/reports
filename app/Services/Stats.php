@@ -108,7 +108,8 @@ final class Stats
                 $bp
             ),
             'countries'   => Database::select(
-                "SELECT COALESCE(NULLIF(country, ''), 'Unknown') country, COUNT(DISTINCT visitor_hash) n
+                "SELECT COALESCE(NULLIF(country, ''), 'Unknown') country,
+                        MAX(country_code) cc, COUNT(DISTINCT visitor_hash) n
                  FROM events WHERE {$human}
                  GROUP BY country ORDER BY n DESC LIMIT 12",
                 $bp
