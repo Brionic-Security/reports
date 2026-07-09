@@ -196,4 +196,96 @@ final class Stats
             'pageviews' => (int) ($row['pageviews'] ?? 0),
         ];
     }
+
+    // ── realtime + overview ────────────────────────────────────────────────
+
+    /** Visitors active in the last N minutes + a live feed of recent hits. */
+    public static function realtime(int $siteId, int $minutes = 5): array
+    {
+        $since = gmdate('Y-m-d H:i:s', time() - $minutes * 60);
+        $online = (int) (Database::selectOne(
+            "SELECT COUNT(DISTINCT visitor_hash) c FROM events
+             WHERE site_id = ? AND is_bot = 0 AND created_at >= ?",
+            [$siteId, $since]
+        )['c'] ?? 0);
+
+        $feed = Database::select(
+            "SELECT type, name, path, is_bot, bot_name, browser, device, country, city, created_at
+             FROM events WHERE site_id = ? AND created_at >= ?
+             ORDER BY id DESC LIMIT 30",
+            [$siteId, gmdate('Y-m-d H:i:s', time() - 1800)]
+        );
+
+        return ['online' => $online, 'feed' => $feed, 'minutes' => $minutes];
+    }
+
+    /**
+     * Online visitor count (last N minutes) per site + total.
+     *
+     * @return array{sites:array<int,int>,total:int}
+     */
+    public static function onlineAll(int $minutes = 5): array
+    {
+        $since = gmdate('Y-m-d H:i:s', time() - $minutes * 60);
+        $rows = Database::select(
+            "SELECT site_id, COUNT(DISTINCT visitor_hash) c FROM events
+             WHERE is_bot = 0 AND created_at >= ? GROUP BY site_id",
+            [$since]
+        );
+        $sites = [];
+        $total = 0;
+        foreach ($rows as $r) {
+            $c = (int) $r['c'];
+            $sites[(int) $r['site_id']] = $c;
+            $total += $c;
+        }
+        return ['sites' => $sites, 'total' => $total];
+    }
+
+    /**
+     * Per-site zero-filled daily human page-view series (for overview sparklines).
+     *
+     * @return array<int,array<int,int>> site_id => [n, n, ...] oldest→newest
+     */
+    public static function sparklines(int $days = 14): array
+    {
+        $since = gmdate('Y-m-d 00:00:00', strtotime('-' . ($days - 1) . ' day'));
+        $rows = Database::select(
+            "SELECT site_id, substr(created_at, 1, 10) d, COUNT(*) n
+             FROM events WHERE is_bot = 0 AND type = 'pageview' AND created_at >= ?
+             GROUP BY site_id, substr(created_at, 1, 10)",
+            [$since]
+        );
+        $keys = [];
+        for ($i = $days - 1; $i >= 0; $i--) {
+            $keys[] = gmdate('Y-m-d', strtotime('-' . $i . ' day'));
+        }
+        $byId = [];
+        foreach ($rows as $r) {
+            $byId[(int) $r['site_id']][(string) $r['d']] = (int) $r['n'];
+        }
+        $out = [];
+        foreach ($byId as $sid => $vals) {
+            $series = [];
+            foreach ($keys as $k) {
+                $series[] = $vals[$k] ?? 0;
+            }
+            $out[$sid] = $series;
+        }
+        return $out;
+    }
+
+    /** Aggregated visitor map (city centroids) across all sites for a window. */
+    public static function mapAll(string $range, ?string $from, ?string $to): array
+    {
+        [$df, $dt] = date_range_bounds($range, $from, $to);
+        [$win, $p] = self::window('created_at', $df, $dt);
+        return Database::select(
+            "SELECT ROUND(lat, 1) rlat, ROUND(lon, 1) rlon, MAX(country) country, MAX(city) city,
+                    COUNT(DISTINCT visitor_hash) n
+             FROM events WHERE {$win} AND is_bot = 0 AND lat IS NOT NULL
+             GROUP BY ROUND(lat, 1), ROUND(lon, 1) ORDER BY n DESC LIMIT 300",
+            $p
+        );
+    }
 }

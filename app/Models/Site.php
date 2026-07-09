@@ -46,6 +46,14 @@ final class Site
         );
     }
 
+    public static function updateMonitor(int $id, ?string $monitorUrl, bool $enabled): void
+    {
+        Database::run(
+            'UPDATE sites SET monitor_url = ?, monitor_enabled = ? WHERE id = ?',
+            [$monitorUrl, $enabled ? 1 : 0, $id]
+        );
+    }
+
     public static function delete(int $id): void
     {
         Database::transaction(function () use ($id) {

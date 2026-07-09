@@ -30,6 +30,13 @@ $this->layout('layout', ['title' => $site['name'] . ' settings · Brionic Report
       <div class="field"><label>Name</label><input class="input" name="name" value="<?= e($site['name']) ?>" required></div>
       <div class="field"><label>Domain</label><input class="input" name="domain" value="<?= e($site['domain']) ?>" required></div>
       <div class="field"><label>Weekly report recipients <span class="muted">(one email per line)</span></label><textarea class="input" name="report_email" rows="3" placeholder="client@acme.com&#10;you@agency.com"><?= e($site['report_email'] ?? '') ?></textarea></div>
+      <div class="field">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+          <input type="checkbox" name="monitor_enabled" value="1" <?= (int) ($site['monitor_enabled'] ?? 1) === 1 ? 'checked' : '' ?>>
+          Monitor uptime for this site
+        </label>
+      </div>
+      <div class="field"><label>Monitor URL <span class="muted">(optional — defaults to https://<?= e($site['domain']) ?>)</span></label><input class="input" type="url" name="monitor_url" value="<?= e($site['monitor_url'] ?? '') ?>" placeholder="https://<?= e($site['domain']) ?>/health"></div>
       <button class="btn btn-primary" type="submit">Save</button>
     </form>
     <hr style="border:none;border-top:1px solid var(--line);margin:18px 0">

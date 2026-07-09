@@ -117,6 +117,38 @@ final class Email
         return self::shell($subject, $body, $text);
     }
 
+    /** Downtime / recovery alert for a monitored site. */
+    public static function uptimeAlert(array $site, string $kind, int $status, string $error, int $ms): array
+    {
+        $name = self::esc((string) $site['name']);
+        $domain = self::esc((string) $site['domain']);
+        $down = $kind === 'down';
+        $color = $down ? self::RED : self::GREEN;
+        $icon = $down ? '&#9888;' : '&#10003;';
+        $headline = $down ? 'appears to be DOWN' : 'is back ONLINE';
+
+        $detail = $down
+            ? ($error !== '' ? self::esc($error) : ('HTTP ' . $status))
+            : ('HTTP ' . $status . ' &middot; ' . num($ms) . ' ms');
+
+        $body = self::p('<strong>' . $name . '</strong> (' . $domain . ') ' . $headline . '.')
+            . '<div style="font-size:22px;font-weight:800;color:' . $color . ';margin:2px 0 16px;">'
+                . $icon . ' ' . self::esc(strtoupper($down ? 'down' : 'up')) . '</div>'
+            . self::stats([
+                [$down ? 'Status' : 'Status code', $down ? ($status ?: 0) : $status, $color],
+                ['Response', $ms, self::MUTED],
+            ])
+            . self::pMuted($down
+                ? 'We could not reach the site. Details: ' . $detail . '. We&rsquo;ll email you again the moment it recovers.'
+                : 'The site responded normally. Details: ' . $detail . '.');
+
+        $subject = ($down ? 'Site DOWN' : 'Site recovered') . ' — ' . (string) $site['name'];
+        $text = ($down ? "DOWN" : "RECOVERED") . ": {$site['name']} ({$site['domain']}) — "
+            . ($down ? ($error !== '' ? $error : 'HTTP ' . $status) : 'HTTP ' . $status . ', ' . $ms . 'ms') . "\n";
+
+        return self::shell($subject, $body, $text);
+    }
+
     // ── layout pieces ─────────────────────────────────────────────────────────
 
     /** @param array<int,array{0:string,1:int,2:string}> $items */

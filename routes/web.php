@@ -29,10 +29,14 @@ return function (Router $router): void {
     // ── Dashboard (operator only) ────────────────────────────────────────────
     $router->group(['middleware' => ['admin']], function (Router $r) {
         $r->get('/dashboard', [DashboardController::class, 'overview']);
+        $r->get('/dashboard/export.csv', [DashboardController::class, 'exportOverview']);
+        $r->get('/dashboard/realtime.json', [DashboardController::class, 'realtimeOverview']);
 
         $r->get('/sites', [SiteController::class, 'index']);
         $r->post('/sites', [SiteController::class, 'store'], ['csrf']);
         $r->get('/sites/{id}', [DashboardController::class, 'site']);
+        $r->get('/sites/{id}/export.csv', [DashboardController::class, 'exportSite']);
+        $r->get('/sites/{id}/realtime.json', [DashboardController::class, 'realtimeSite']);
         $r->get('/sites/{id}/settings', [SiteController::class, 'show']);
         $r->post('/sites/{id}', [SiteController::class, 'update'], ['csrf']);
         $r->post('/sites/{id}/delete', [SiteController::class, 'destroy'], ['csrf']);

@@ -58,6 +58,11 @@ final class SiteController
         $domain = trim((string) $request->input('domain', (string) $site['domain']));
         $email = trim((string) $request->input('report_email', ''));
         Site::update((int) $site['id'], $name, $domain, $email !== '' ? $email : null);
+
+        $monitorUrl = trim((string) $request->input('monitor_url', ''));
+        $monitorEnabled = $request->input('monitor_enabled') !== null;
+        Site::updateMonitor((int) $site['id'], $monitorUrl !== '' ? $monitorUrl : null, $monitorEnabled);
+
         Session::flash('ok', 'Saved.');
         return Response::redirect(app_url('sites/' . $site['id'] . '/settings'));
     }

@@ -130,3 +130,54 @@ h2 { font-size: 1.15rem; margin: 0 0 14px; }
 .geo-map { background: #0e1118; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; margin-top: 8px; }
 .geo-map svg { display: block; width: 100%; height: auto; }
 .geo-map circle { filter: drop-shadow(0 0 3px rgba(217,43,50,.7)); }
+
+/* Filter bar + date range + export */
+.filter-bar { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; margin-bottom: 20px; }
+.filter-bar .filter { margin-bottom: 0; }
+.daterange { display: flex; gap: 6px; align-items: center; margin: 0; }
+.daterange .sep { color: var(--muted); }
+.input-date { background: #0a0c11; border: 1px solid var(--line); color: var(--text); border-radius: 8px; padding: 5px 8px; font-size: .82rem; color-scheme: dark; }
+.btn.active { background: var(--panel-2); border-color: #384357; color: var(--text); }
+.btn.export { margin-left: auto; }
+
+/* Live pulse dot + feed */
+.live-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: var(--green); box-shadow: 0 0 0 0 rgba(46,211,167,.6); animation: pulse 1.8s infinite; vertical-align: middle; }
+.live-dot.sm { width: 7px; height: 7px; margin-right: 4px; }
+@keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(46,211,167,.55); } 70% { box-shadow: 0 0 0 8px rgba(46,211,167,0); } 100% { box-shadow: 0 0 0 0 rgba(46,211,167,0); } }
+@media (prefers-reduced-motion: reduce) { .live-dot { animation: none; } }
+.live-now { font-size: 2.4rem; font-weight: 800; line-height: 1; margin: 4px 0 2px; }
+.live-now .live-lbl { font-size: .9rem; font-weight: 600; color: var(--muted); margin-left: 8px; }
+.live-feed { list-style: none; margin: 6px 0 0; padding: 0; max-height: 260px; overflow-y: auto; }
+.live-feed li { display: flex; align-items: center; gap: 8px; padding: 7px 0; border-bottom: 1px solid var(--line); font-size: .82rem; }
+.live-feed li:last-child { border-bottom: none; }
+.live-feed .fp { color: var(--text); font-variant-numeric: tabular-nums; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 40%; }
+.live-feed .fw { color: var(--muted); }
+.live-feed .fa { margin-left: auto; color: var(--muted); font-size: .76rem; white-space: nowrap; }
+
+/* Uptime */
+.up-status { display: flex; align-items: center; gap: 10px; }
+.up-badge { display: inline-flex; align-items: center; gap: 7px; font-weight: 700; font-size: .95rem; }
+.up-led { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); }
+.up-status.up .up-badge { color: var(--green); } .up-status.up .up-led { background: var(--green); box-shadow: 0 0 6px rgba(46,211,167,.7); }
+.up-status.down .up-badge { color: #f2a3ad; } .up-status.down .up-led { background: var(--accent); box-shadow: 0 0 6px rgba(217,43,50,.7); }
+.up-status.unknown .up-badge { color: var(--muted); }
+.stat.sm { padding: 12px 14px; } .stat.sm .n { font-size: 1.4rem; }
+.up-bars { display: flex; gap: 3px; margin-top: 14px; align-items: flex-end; }
+.up-bar { flex: 1; height: 22px; border-radius: 3px; background: var(--line); }
+.up-bar.ok { background: var(--green); opacity: .85; }
+.up-bar.bad { background: var(--accent); }
+
+/* Uptime pill on overview cards */
+.site-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.up-pill { display: inline-flex; align-items: center; gap: 6px; font-size: .74rem; font-weight: 700; padding: 3px 10px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); white-space: nowrap; }
+.up-pill.up { color: var(--green); border-color: rgba(46,211,167,.35); } .up-pill.up .up-led { background: var(--green); }
+.up-pill.down { color: #f2a3ad; border-color: rgba(217,43,50,.4); } .up-pill.down .up-led { background: var(--accent); }
+.site-card .n.on { display: flex; align-items: center; }
+
+/* Sparklines */
+.spark-wrap { margin: 12px 0 4px; height: 30px; }
+.spark { width: 100%; height: 30px; display: block; }
+.spark-empty { height: 30px; border-bottom: 1px dashed var(--line); }
+
+/* Live stat highlight */
+.stat.live .n { display: flex; align-items: center; gap: 8px; -webkit-text-fill-color: initial; background: none; color: var(--text); }
