@@ -3,7 +3,7 @@
  * Plugin Name:       Brionic Config
  * Plugin URI:        https://reports.brionicsecurity.com
  * Description:       Brionic all-in-one WordPress config: analytics, SEO, email controls, automatic-update management, a branded login page, an under-construction mode, and cache tools — one plugin for your Brionic-managed site.
- * Version:           1.3.5
+ * Version:           1.3.6
  * Author:            Brionic Security
  * Author URI:        https://brionicsecurity.com
  * License:           MIT
@@ -204,6 +204,18 @@ if (get_option('brionic_au_quiet', '0') === '1') {
     add_filter('auto_core_update_send_email', '__return_false');
 }
 
+/** Parse one or more email addresses (comma / semicolon / space / newline separated) into a validated, de-duplicated list. */
+function brionic_email_list($raw) {
+    $out = [];
+    foreach (preg_split('/[\s,;]+/', (string) $raw, -1, PREG_SPLIT_NO_EMPTY) as $part) {
+        $email = sanitize_email($part);
+        if ($email && is_email($email) && !in_array($email, $out, true)) {
+            $out[] = $email;
+        }
+    }
+    return $out;
+}
+
 // Email a summary after the auto-updater runs.
 add_action('automatic_updates_complete', function ($results) {
     if (get_option('brionic_au_notify', '1') !== '1') {
@@ -226,9 +238,9 @@ add_action('automatic_updates_complete', function ($results) {
         return;
     }
     $site = get_bloginfo('name');
-    $to = sanitize_email((string) get_option('brionic_au_notify_email', ''));
-    if (!is_email($to)) {
-        $to = (string) get_option('admin_email');
+    $to = brionic_email_list(get_option('brionic_au_notify_email', ''));
+    if (!$to) {
+        $to = [(string) get_option('admin_email')];
     }
     wp_mail(
         $to,
@@ -753,7 +765,7 @@ function brionic_analytics_settings_page() {
         update_option('brionic_au_themes',     isset($_POST['brionic_au_themes']) ? '1' : '0');
         update_option('brionic_au_notify',     isset($_POST['brionic_au_notify']) ? '1' : '0');
         update_option('brionic_au_quiet',      isset($_POST['brionic_au_quiet']) ? '1' : '0');
-        update_option('brionic_au_notify_email', sanitize_email(wp_unslash($_POST['brionic_au_notify_email'] ?? '')));
+        update_option('brionic_au_notify_email', implode(', ', brionic_email_list(wp_unslash($_POST['brionic_au_notify_email'] ?? ''))));
         echo '<div class="notice notice-success is-dismissible"><p>Update settings saved.</p></div>';
     }
 
@@ -1006,9 +1018,9 @@ function brionic_analytics_settings_page() {
                     <label><input type="checkbox" name="brionic_au_notify" <?php checked($auNotify); ?>> Email me a summary after automatic updates run</label><br>
                     <label><input type="checkbox" name="brionic_au_quiet" <?php checked($auQuiet); ?>> Silence WordPress&rsquo;s own core-update emails (use Brionic&rsquo;s instead)</label>
                 </td></tr>
-                <tr><th scope="row"><label for="brionic_au_notify_email">Notify address</label></th><td>
-                    <input type="email" class="regular-text" id="brionic_au_notify_email" name="brionic_au_notify_email" value="<?php echo esc_attr($auEmail); ?>" placeholder="<?php echo esc_attr($adminEmail); ?>">
-                    <p class="description">Where update summaries go (sent using the email settings above). Uses the admin email if blank.</p>
+                <tr><th scope="row"><label for="brionic_au_notify_email">Notify address(es)</label></th><td>
+                    <input type="text" class="regular-text" id="brionic_au_notify_email" name="brionic_au_notify_email" value="<?php echo esc_attr($auEmail); ?>" placeholder="<?php echo esc_attr($adminEmail); ?>">
+                    <p class="description">Where update summaries go (sent using the email settings above). You can enter <strong>multiple addresses separated by commas</strong>. Uses the admin email if blank.</p>
                 </td></tr>
             </table>
             <?php submit_button('Save update settings'); ?>
