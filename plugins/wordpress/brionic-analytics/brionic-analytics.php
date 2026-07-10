@@ -3,7 +3,7 @@
  * Plugin Name:       Brionic Reports
  * Plugin URI:        https://reports.brionicsecurity.com
  * Description:       Brionic Reports analytics, email controls, automatic-update management with notifications, and a branded login page — one plugin for your Brionic-managed WordPress site.
- * Version:           1.2.0
+ * Version:           1.2.2
  * Author:            Brionic Security
  * Author URI:        https://brionicsecurity.com
  * License:           MIT
@@ -29,7 +29,10 @@ define('BRIONIC_ANALYTICS_SRC', '__TRACKER_SRC__');
  * copy falls back to the key saved on the settings page.
  */
 function brionic_analytics_key() {
-    if (BRIONIC_ANALYTICS_DEFAULT_KEY !== '__SITE_KEY__') {
+    // A baked download has the real key (always begins "site_") compiled in; the
+    // unbaked source keeps the "__SITE_KEY__" placeholder. Detect by prefix so the
+    // check survives the download-time token replacement and always wins.
+    if (strncmp(BRIONIC_ANALYTICS_DEFAULT_KEY, 'site_', 5) === 0) {
         return BRIONIC_ANALYTICS_DEFAULT_KEY;
     }
     return trim((string) get_option('brionic_analytics_site_key', ''));
@@ -38,7 +41,7 @@ function brionic_analytics_key() {
 /** On activation, seed the option with the baked-in key if not already set. */
 register_activation_hook(__FILE__, function () {
     if (get_option('brionic_analytics_site_key', '') === ''
-        && BRIONIC_ANALYTICS_DEFAULT_KEY !== '__SITE_KEY__') {
+        && strncmp(BRIONIC_ANALYTICS_DEFAULT_KEY, 'site_', 5) === 0) {
         update_option('brionic_analytics_site_key', BRIONIC_ANALYTICS_DEFAULT_KEY);
     }
 });
@@ -46,7 +49,7 @@ register_activation_hook(__FILE__, function () {
 /** Inject the tracker into the <head> of every front-end page. */
 add_action('wp_head', function () {
     $key = brionic_analytics_key();
-    if ($key === '' || $key === '__SITE_KEY__' || is_admin()) {
+    if (strncmp($key, 'site_', 5) !== 0 || is_admin()) {
         return;
     }
     // A comment marker is emitted even if an optimiser later strips the <script>,
@@ -58,7 +61,7 @@ add_action('wp_head', function () {
 // keep it (raw wp_head output is sometimes stripped or combined away).
 add_action('wp_enqueue_scripts', function () {
     $key = brionic_analytics_key();
-    if ($key === '' || $key === '__SITE_KEY__') {
+    if (strncmp($key, 'site_', 5) !== 0) {
         return;
     }
     wp_enqueue_script('brionic-analytics', BRIONIC_ANALYTICS_SRC, [], null, false);
@@ -79,7 +82,7 @@ function brionic_analytics_base() {
 /** Server-side connection test against the Reports /api/verify endpoint. */
 function brionic_analytics_test_connection() {
     $key = brionic_analytics_key();
-    if ($key === '' || $key === '__SITE_KEY__') {
+    if (strncmp($key, 'site_', 5) !== 0) {
         return ['ok' => false, 'msg' => 'No site key is configured yet.'];
     }
     $url = brionic_analytics_base() . '/api/verify?key=' . rawurlencode($key);
@@ -250,6 +253,55 @@ add_action('admin_menu', function () {
     );
 });
 
+/**
+ * Best-effort flush of everything that can leave stale pages or compiled code on
+ * the site: the WordPress object cache, PHP OPcache, and any common caching
+ * plugin. Each step is guarded so it is safe on any host. Returns a list of the
+ * caches that were actually cleared.
+ */
+function brionic_cache_flush() {
+    $done = [];
+
+    if (function_exists('wp_cache_flush')) {
+        wp_cache_flush();
+        $done[] = 'WordPress object cache';
+    }
+
+    if (function_exists('opcache_reset') && @opcache_reset()) {
+        $done[] = 'PHP OPcache';
+    }
+    if (function_exists('opcache_invalidate') && defined('ABSPATH')) {
+        // Also invalidate the file cache some hosts (e.g. SiteGround) use.
+        @opcache_invalidate(__FILE__, true);
+    }
+
+    // SiteGround Speed Optimizer.
+    if (class_exists('\\SiteGround_Optimizer\\Supercacher\\Supercacher')) {
+        do_action('siteground_optimizer_flush_cache');
+        $done[] = 'SiteGround cache';
+    }
+
+    // WP Rocket.
+    if (function_exists('rocket_clean_domain')) {
+        rocket_clean_domain();
+        $done[] = 'WP Rocket';
+    }
+
+    // LiteSpeed Cache.
+    if (has_action('litespeed_purge_all')) {
+        do_action('litespeed_purge_all');
+        $done[] = 'LiteSpeed cache';
+    }
+
+    // W3 Total Cache.
+    if (function_exists('w3tc_flush_all')) {
+        w3tc_flush_all();
+        $done[] = 'W3 Total Cache';
+    }
+
+    return $done;
+}
+
 function brionic_analytics_settings_page() {
     if (!current_user_can('manage_options')) {
         return;
@@ -308,10 +360,19 @@ function brionic_analytics_settings_page() {
         echo '<div class="notice notice-success is-dismissible"><p>Login page settings saved.</p></div>';
     }
 
+    // Flush all caches.
+    if (isset($_POST['brionic_cache_flush']) && check_admin_referer('brionic_cache_flush')) {
+        $flushed = brionic_cache_flush();
+        $msg = $flushed
+            ? 'Flushed: ' . implode(', ', $flushed) . '.'
+            : 'No caches were found to flush.';
+        echo '<div class="notice notice-success is-dismissible"><p>' . esc_html($msg) . '</p></div>';
+    }
+
     $saved = trim((string) get_option('brionic_analytics_site_key', ''));
-    $baked = (BRIONIC_ANALYTICS_DEFAULT_KEY !== '__SITE_KEY__');
+    $baked = (strncmp(BRIONIC_ANALYTICS_DEFAULT_KEY, 'site_', 5) === 0);
     $key = brionic_analytics_key();
-    $active = ($key !== '' && $key !== '__SITE_KEY__');
+    $active = (strncmp($key, 'site_', 5) === 0);
     $mFromName  = (string) get_option('brionic_mail_from_name', '');
     $mFromEmail = (string) get_option('brionic_mail_from_email', '');
     $mReplyTo   = (string) get_option('brionic_mail_reply_to', '');
@@ -465,6 +526,16 @@ function brionic_analytics_settings_page() {
                 </td></tr>
             </table>
             <?php submit_button('Save login settings'); ?>
+        </form>
+
+        <hr>
+        <h2>Maintenance</h2>
+        <p>Clear cached pages and compiled PHP if the site is serving stale content or a plugin/theme change isn&rsquo;t showing up. Safe to run anytime &mdash; caches simply rebuild on the next visit.</p>
+        <form action="" method="post">
+            <?php wp_nonce_field('brionic_cache_flush'); ?>
+            <input type="hidden" name="brionic_cache_flush" value="1">
+            <button type="submit" class="button button-secondary">Flush all caches</button>
+            <span class="description" style="margin-left:8px">Clears the WordPress object cache, PHP OPcache, and any caching plugin found (SiteGround, WP Rocket, LiteSpeed, W3&nbsp;Total&nbsp;Cache).</span>
         </form>
     </div>
     <?php
