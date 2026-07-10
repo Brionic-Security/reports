@@ -1,9 +1,9 @@
 <?php
 /**
- * Plugin Name:       Brionic Reports
+ * Plugin Name:       Brionic Config
  * Plugin URI:        https://reports.brionicsecurity.com
- * Description:       Brionic Reports analytics, email controls, automatic-update management with notifications, and a branded login page — one plugin for your Brionic-managed WordPress site.
- * Version:           1.2.3
+ * Description:       Brionic all-in-one WordPress config: analytics, SEO, email controls, automatic-update management, a branded login page, an under-construction mode, and cache tools — one plugin for your Brionic-managed site.
+ * Version:           1.3.0
  * Author:            Brionic Security
  * Author URI:        https://brionicsecurity.com
  * License:           MIT
@@ -12,7 +12,7 @@
  *
  * The site key + tracker URL below are pre-filled when you download this plugin
  * from your Brionic Reports dashboard. You can also change the key later under
- * Settings → Brionic Reports.
+ * Settings → Brionic Config.
  */
 
 if (!defined('ABSPATH')) {
@@ -137,7 +137,7 @@ function brionic_mail_send_test($to) {
     $sent = wp_mail(
         $to,
         'Brionic Reports — test email',
-        "This is a test email from your WordPress site, sent through Brionic Reports Config.\n\n"
+        "This is a test email from your WordPress site, sent through Brionic Config.\n\n"
         . "If you received it, your From name/address, Reply-To and forwarding settings are working."
     );
     return $sent
@@ -311,11 +311,281 @@ add_action('template_redirect', function () {
     exit;
 });
 
-/** Settings page under Settings → Brionic Reports Config. */
+// ── Brionic SEO ─────────────────────────────────────────────────────────────
+// A self-contained, zero-config SEO engine: titles, meta description, canonical,
+// robots, Open Graph, Twitter cards and JSON-LD schema. Deterministic (no AI, no
+// external calls). Stays dormant while another SEO plugin (Yoast, Rank Math, AIO
+// SEO, SEOPress, The SEO Framework) is active, so it never double-outputs tags —
+// deactivate the other plugin and Brionic SEO takes over automatically.
+
+/** Returns the name of a competing SEO plugin if one is active, else ''. */
+function brionic_seo_competitor() {
+    if (defined('WPSEO_VERSION'))                                 return 'Yoast SEO';
+    if (defined('RANK_MATH_VERSION') || class_exists('RankMath')) return 'Rank Math';
+    if (defined('AIOSEO_VERSION') || function_exists('aioseo'))   return 'All in One SEO';
+    if (defined('SEOPRESS_VERSION'))                              return 'SEOPress';
+    if (defined('THE_SEO_FRAMEWORK_VERSION'))                     return 'The SEO Framework';
+    return '';
+}
+
+/** True only when Brionic SEO is enabled AND no competing SEO plugin is active. */
+function brionic_seo_active() {
+    return get_option('brionic_seo_enabled', '0') === '1' && brionic_seo_competitor() === '';
+}
+
+/** Trim to a length on a word boundary with an ellipsis. */
+function brionic_seo_trim($s, $len = 160) {
+    $s = trim(preg_replace('/\s+/', ' ', (string) $s));
+    if (function_exists('mb_strlen') ? mb_strlen($s) <= $len : strlen($s) <= $len) {
+        return $s;
+    }
+    $cut = function_exists('mb_substr') ? mb_substr($s, 0, $len - 1) : substr($s, 0, $len - 1);
+    $sp  = function_exists('mb_strrpos') ? mb_strrpos($cut, ' ') : strrpos($cut, ' ');
+    if ($sp && $sp > $len * 0.6) {
+        $cut = function_exists('mb_substr') ? mb_substr($cut, 0, $sp) : substr($cut, 0, $sp);
+    }
+    return rtrim($cut) . '…';
+}
+
+function brionic_seo_sep() {
+    $sep = trim((string) get_option('brionic_seo_sep', ''));
+    return ' ' . ($sep !== '' ? $sep : '–') . ' ';
+}
+
+/** Compute the document title for the current request. */
+function brionic_seo_title() {
+    $site = get_bloginfo('name');
+    $sep  = brionic_seo_sep();
+    if (is_front_page()) {
+        $h = trim((string) get_option('brionic_seo_home_title', ''));
+        if ($h !== '') {
+            return $h;
+        }
+        $tag = get_bloginfo('description');
+        return $tag ? $site . $sep . $tag : $site;
+    }
+    if (is_singular())                         { $t = get_the_title(get_queried_object_id()); }
+    elseif (is_category() || is_tag() || is_tax()) { $t = single_term_title('', false); }
+    elseif (is_post_type_archive())            { $t = post_type_archive_title('', false); }
+    elseif (is_author())                       { $t = get_the_author_meta('display_name', (int) get_queried_object_id()); }
+    elseif (is_search())                       { $t = 'Search results for “' . get_search_query() . '”'; }
+    elseif (is_404())                          { $t = 'Page not found'; }
+    elseif (is_archive())                      { $t = wp_strip_all_tags(get_the_archive_title()); }
+    else                                       { $t = ''; }
+    $t = trim(wp_strip_all_tags((string) $t));
+    return $t !== '' ? $t . $sep . $site : $site;
+}
+
+/** Compute the meta description for the current request. */
+function brionic_seo_description() {
+    if (is_front_page()) {
+        $d = trim((string) get_option('brionic_seo_home_desc', ''));
+        return $d !== '' ? $d : get_bloginfo('description');
+    }
+    if (is_singular()) {
+        $post = get_queried_object();
+        if ($post instanceof WP_Post) {
+            if (has_excerpt($post)) {
+                return brionic_seo_trim(wp_strip_all_tags(get_the_excerpt($post)));
+            }
+            $c = wp_strip_all_tags(strip_shortcodes((string) $post->post_content));
+            return brionic_seo_trim($c);
+        }
+    }
+    if (is_category() || is_tag() || is_tax()) {
+        $term = get_queried_object();
+        if ($term && !empty($term->description)) {
+            return brionic_seo_trim(wp_strip_all_tags($term->description));
+        }
+    }
+    return get_bloginfo('description');
+}
+
+/** Best canonical URL for the current request. */
+function brionic_seo_canonical() {
+    if (is_front_page())  { return home_url('/'); }
+    if (is_singular())    { return get_permalink(get_queried_object_id()); }
+    if (is_category() || is_tag() || is_tax()) {
+        $l = get_term_link(get_queried_object());
+        return is_wp_error($l) ? '' : $l;
+    }
+    if (is_post_type_archive()) { return get_post_type_archive_link(get_query_var('post_type')) ?: ''; }
+    if (is_author())            { return get_author_posts_url((int) get_queried_object_id()); }
+    return '';
+}
+
+/** Best sharing image URL for the current request. */
+function brionic_seo_image() {
+    if (is_singular() && has_post_thumbnail(get_queried_object_id())) {
+        $u = get_the_post_thumbnail_url(get_queried_object_id(), 'full');
+        if ($u) { return $u; }
+    }
+    $d = trim((string) get_option('brionic_seo_og_image', ''));
+    if ($d !== '') { return $d; }
+    $icon = function_exists('get_site_icon_url') ? get_site_icon_url(512) : '';
+    return $icon ?: '';
+}
+
+// Force the theme to use the WordPress <title> tag so our filter applies.
+add_action('after_setup_theme', function () {
+    if (get_option('brionic_seo_enabled', '0') === '1') {
+        add_theme_support('title-tag');
+    }
+}, 99);
+
+add_filter('pre_get_document_title', function ($title) {
+    return brionic_seo_active() ? brionic_seo_title() : $title;
+}, 20);
+
+// Take over canonical output (core only prints it on singular views).
+add_action('template_redirect', function () {
+    if (brionic_seo_active()) {
+        remove_action('wp_head', 'rel_canonical');
+    }
+}, 9);
+
+// Tune the robots meta WordPress already prints (avoids a duplicate tag).
+add_filter('wp_robots', function ($robots) {
+    if (!brionic_seo_active()) {
+        return $robots;
+    }
+    if (is_search() || is_404()) {
+        $robots['noindex'] = true;
+        $robots['follow']  = true;
+    }
+    if (get_option('brionic_seo_noindex_archives', '0') === '1' && (is_author() || is_date())) {
+        $robots['noindex'] = true;
+    }
+    $robots['max-image-preview'] = 'large';
+    return $robots;
+});
+
+// Emit description, canonical, Open Graph, Twitter cards and JSON-LD.
+add_action('wp_head', function () {
+    if (!brionic_seo_active()) {
+        return;
+    }
+    $desc      = brionic_seo_description();
+    $canonical = brionic_seo_canonical();
+    $title     = brionic_seo_title();
+    $image     = brionic_seo_image();
+    $site      = get_bloginfo('name');
+
+    echo "\n<!-- Brionic SEO -->\n";
+    if ($desc)      { echo '<meta name="description" content="' . esc_attr($desc) . '">' . "\n"; }
+    if ($canonical) { echo '<link rel="canonical" href="' . esc_url($canonical) . '">' . "\n"; }
+
+    if (get_option('brionic_seo_social', '1') === '1') {
+        $type = (is_singular() && !is_front_page()) ? 'article' : 'website';
+        echo '<meta property="og:locale" content="' . esc_attr(str_replace('-', '_', get_locale())) . '">' . "\n";
+        echo '<meta property="og:type" content="' . esc_attr($type) . '">' . "\n";
+        echo '<meta property="og:title" content="' . esc_attr($title) . '">' . "\n";
+        if ($desc)      { echo '<meta property="og:description" content="' . esc_attr($desc) . '">' . "\n"; }
+        if ($canonical) { echo '<meta property="og:url" content="' . esc_url($canonical) . '">' . "\n"; }
+        echo '<meta property="og:site_name" content="' . esc_attr($site) . '">' . "\n";
+        if ($image) { echo '<meta property="og:image" content="' . esc_url($image) . '">' . "\n"; }
+        echo '<meta name="twitter:card" content="' . ($image ? 'summary_large_image' : 'summary') . '">' . "\n";
+        echo '<meta name="twitter:title" content="' . esc_attr($title) . '">' . "\n";
+        if ($desc)  { echo '<meta name="twitter:description" content="' . esc_attr($desc) . '">' . "\n"; }
+        if ($image) { echo '<meta name="twitter:image" content="' . esc_url($image) . '">' . "\n"; }
+    }
+
+    if (get_option('brionic_seo_schema', '1') === '1') {
+        $graph = brionic_seo_schema_graph();
+        if ($graph) {
+            echo '<script type="application/ld+json">'
+                . wp_json_encode($graph, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)
+                . '</script>' . "\n";
+        }
+    }
+    echo "<!-- /Brionic SEO -->\n";
+}, 1);
+
+/** Build the schema.org @graph for the current request. */
+function brionic_seo_schema_graph() {
+    $home    = home_url('/');
+    $orgName = trim((string) get_option('brionic_seo_org_name', '')) ?: get_bloginfo('name');
+    $orgLogo = trim((string) get_option('brionic_seo_org_logo', ''));
+    if ($orgLogo === '' && function_exists('get_site_icon_url')) {
+        $orgLogo = get_site_icon_url(512);
+    }
+
+    $org = ['@type' => 'Organization', '@id' => $home . '#org', 'name' => $orgName, 'url' => $home];
+    if ($orgLogo) {
+        $org['logo'] = ['@type' => 'ImageObject', 'url' => $orgLogo];
+    }
+    $graph = [$org];
+
+    $graph[] = [
+        '@type'     => 'WebSite',
+        '@id'       => $home . '#website',
+        'url'       => $home,
+        'name'      => get_bloginfo('name'),
+        'publisher' => ['@id' => $home . '#org'],
+        'potentialAction' => [
+            '@type'       => 'SearchAction',
+            'target'      => ['@type' => 'EntryPoint', 'urlTemplate' => $home . '?s={search_term_string}'],
+            'query-input' => 'required name=search_term_string',
+        ],
+    ];
+
+    if (is_singular('post')) {
+        $id = get_queried_object_id();
+        $graph[] = [
+            '@type'            => 'Article',
+            '@id'              => get_permalink($id) . '#article',
+            'headline'         => wp_strip_all_tags(get_the_title($id)),
+            'datePublished'    => get_the_date('c', $id),
+            'dateModified'     => get_the_modified_date('c', $id),
+            'author'           => ['@type' => 'Person', 'name' => get_the_author_meta('display_name', (int) get_post_field('post_author', $id))],
+            'publisher'        => ['@id' => $home . '#org'],
+            'mainEntityOfPage' => get_permalink($id),
+        ];
+    }
+
+    if (is_singular()) {
+        $id     = get_queried_object_id();
+        $crumbs = [['name' => get_bloginfo('name'), 'url' => $home]];
+        if (is_singular('post')) {
+            $cats = get_the_category($id);
+            if ($cats) {
+                $crumbs[] = ['name' => $cats[0]->name, 'url' => get_category_link($cats[0]->term_id)];
+            }
+        }
+        $crumbs[] = ['name' => wp_strip_all_tags(get_the_title($id)), 'url' => get_permalink($id)];
+        $items = [];
+        $pos   = 1;
+        foreach ($crumbs as $c) {
+            $items[] = ['@type' => 'ListItem', 'position' => $pos++, 'name' => $c['name'], 'item' => $c['url']];
+        }
+        $graph[] = ['@type' => 'BreadcrumbList', '@id' => get_permalink($id) . '#breadcrumb', 'itemListElement' => $items];
+    }
+
+    return ['@context' => 'https://schema.org', '@graph' => $graph];
+}
+
+// Admin nudge: enabled but a competing SEO plugin is still active.
+add_action('admin_notices', function () {
+    if (!current_user_can('manage_options')) {
+        return;
+    }
+    if (get_option('brionic_seo_enabled', '0') !== '1') {
+        return;
+    }
+    $competitor = brionic_seo_competitor();
+    if ($competitor === '') {
+        return;
+    }
+    echo '<div class="notice notice-warning"><p><strong>Brionic SEO is waiting.</strong> '
+        . esc_html($competitor) . ' is still active, so Brionic SEO is dormant to avoid duplicate tags. '
+        . 'Deactivate ' . esc_html($competitor) . ' and Brionic SEO will take over automatically.</p></div>';
+});
+
+/** Settings page under Settings → Brionic Config. */
 add_action('admin_menu', function () {
     add_options_page(
-        'Brionic Reports Config',
-        'Brionic Reports',
+        'Brionic Config',
+        'Brionic Config',
         'manage_options',
         'brionic-analytics',
         'brionic_analytics_settings_page'
@@ -448,7 +718,20 @@ function brionic_analytics_settings_page() {
         echo '<div class="notice notice-success is-dismissible"><p>Under-construction settings saved.</p></div>';
     }
 
-    $saved = trim((string) get_option('brionic_analytics_site_key', ''));
+    // SEO settings save.
+    if (isset($_POST['brionic_seo_save']) && check_admin_referer('brionic_seo_save')) {
+        update_option('brionic_seo_enabled', isset($_POST['brionic_seo_enabled']) ? '1' : '0');
+        update_option('brionic_seo_social', isset($_POST['brionic_seo_social']) ? '1' : '0');
+        update_option('brionic_seo_schema', isset($_POST['brionic_seo_schema']) ? '1' : '0');
+        update_option('brionic_seo_noindex_archives', isset($_POST['brionic_seo_noindex_archives']) ? '1' : '0');
+        update_option('brionic_seo_sep', sanitize_text_field(wp_unslash($_POST['brionic_seo_sep'] ?? '')));
+        update_option('brionic_seo_home_title', sanitize_text_field(wp_unslash($_POST['brionic_seo_home_title'] ?? '')));
+        update_option('brionic_seo_home_desc', sanitize_textarea_field(wp_unslash($_POST['brionic_seo_home_desc'] ?? '')));
+        update_option('brionic_seo_og_image', esc_url_raw(wp_unslash($_POST['brionic_seo_og_image'] ?? '')));
+        update_option('brionic_seo_org_name', sanitize_text_field(wp_unslash($_POST['brionic_seo_org_name'] ?? '')));
+        update_option('brionic_seo_org_logo', esc_url_raw(wp_unslash($_POST['brionic_seo_org_logo'] ?? '')));
+        echo '<div class="notice notice-success is-dismissible"><p>SEO settings saved.</p></div>';
+    }
     $baked = (strncmp(BRIONIC_ANALYTICS_DEFAULT_KEY, 'site_', 5) === 0);
     $key = brionic_analytics_key();
     $active = (strncmp($key, 'site_', 5) === 0);
@@ -472,9 +755,21 @@ function brionic_analytics_settings_page() {
     $ucMessage   = (string) get_option('brionic_uc_message', '');
     $ucLogo      = (string) get_option('brionic_uc_logo_url', '');
     $ucBg        = (string) get_option('brionic_uc_bg_url', '');
+    $seoOn       = get_option('brionic_seo_enabled', '0') === '1';
+    $seoSocial   = get_option('brionic_seo_social', '1') === '1';
+    $seoSchema   = get_option('brionic_seo_schema', '1') === '1';
+    $seoNoArch   = get_option('brionic_seo_noindex_archives', '0') === '1';
+    $seoSep      = (string) get_option('brionic_seo_sep', '');
+    $seoHomeT    = (string) get_option('brionic_seo_home_title', '');
+    $seoHomeD    = (string) get_option('brionic_seo_home_desc', '');
+    $seoOgImg    = (string) get_option('brionic_seo_og_image', '');
+    $seoOrgName  = (string) get_option('brionic_seo_org_name', '');
+    $seoOrgLogo  = (string) get_option('brionic_seo_org_logo', '');
+    $seoRival    = brionic_seo_competitor();
 
     $tabs = [
         'analytics'    => 'Analytics',
+        'seo'          => 'SEO',
         'email'        => 'Email',
         'updates'      => 'Automatic updates',
         'login'        => 'Login page',
@@ -485,7 +780,7 @@ function brionic_analytics_settings_page() {
     $tabBase = admin_url('options-general.php?page=brionic-analytics');
     ?>
     <div class="wrap">
-        <h1>Brionic Reports Config</h1>
+        <h1>Brionic Config</h1>
         <h2 class="nav-tab-wrapper">
             <?php foreach ($tabs as $tk => $tlabel): ?>
                 <a href="<?php echo esc_url($tabBase . '&tab=' . $tk); ?>" class="nav-tab <?php echo $tab === $tk ? 'nav-tab-active' : ''; ?>"><?php echo esc_html($tlabel); ?></a>
@@ -537,6 +832,55 @@ function brionic_analytics_settings_page() {
             <input type="hidden" name="brionic_analytics_test" value="1">
             <button type="submit" class="button button-secondary">Test connection</button>
             <span class="description" style="margin-left:8px">Checks that your server can reach Brionic Reports and that the site key is valid.</span>
+        </form>
+
+        <?php elseif ($tab === 'seo'): ?>
+        <h2>SEO</h2>
+        <p>Automatic, zero-config search-engine optimisation: page titles, meta descriptions, canonical URLs, Open Graph &amp; Twitter cards, and schema.org structured data &mdash; generated from your content. No keywords to fill in.</p>
+        <?php if ($seoOn && $seoRival !== ''): ?>
+            <div class="notice notice-warning inline"><p><strong><?php echo esc_html($seoRival); ?> is still active.</strong> Brionic SEO stays dormant while another SEO plugin runs, to avoid duplicate tags. Deactivate <?php echo esc_html($seoRival); ?> and Brionic SEO takes over automatically.</p></div>
+        <?php elseif ($seoOn): ?>
+            <div class="notice notice-success inline"><p><strong>Brionic SEO is active</strong> and managing your site&rsquo;s search-engine tags.</p></div>
+        <?php endif; ?>
+        <form action="" method="post">
+            <?php wp_nonce_field('brionic_seo_save'); ?>
+            <input type="hidden" name="brionic_seo_save" value="1">
+            <table class="form-table" role="presentation">
+                <tr><th scope="row">Enable</th><td>
+                    <label><input type="checkbox" name="brionic_seo_enabled" <?php checked($seoOn); ?>> Manage this site&rsquo;s SEO with Brionic</label>
+                    <p class="description">Turn on, then deactivate Yoast (or any other SEO plugin) so Brionic SEO can take over.</p>
+                </td></tr>
+                <tr><th scope="row">Output</th><td>
+                    <label><input type="checkbox" name="brionic_seo_social" <?php checked($seoSocial); ?>> Open Graph &amp; Twitter card tags (social previews)</label><br>
+                    <label><input type="checkbox" name="brionic_seo_schema" <?php checked($seoSchema); ?>> schema.org structured data (JSON-LD)</label><br>
+                    <label><input type="checkbox" name="brionic_seo_noindex_archives" <?php checked($seoNoArch); ?>> Keep author &amp; date archives out of search results (noindex)</label>
+                </td></tr>
+                <tr><th scope="row"><label for="brionic_seo_sep">Title separator</label></th><td>
+                    <input type="text" class="small-text" id="brionic_seo_sep" name="brionic_seo_sep" value="<?php echo esc_attr($seoSep); ?>" placeholder="–" maxlength="3">
+                    <p class="description">Sits between the page title and site name, e.g. <code>Page&nbsp;–&nbsp;Site</code>.</p>
+                </td></tr>
+                <tr><th scope="row"><label for="brionic_seo_home_title">Home title</label></th><td>
+                    <input type="text" class="regular-text" id="brionic_seo_home_title" name="brionic_seo_home_title" value="<?php echo esc_attr($seoHomeT); ?>" placeholder="<?php echo esc_attr(get_bloginfo('name')); ?>">
+                    <p class="description">The title tag for your front page. Blank = site name + tagline.</p>
+                </td></tr>
+                <tr><th scope="row"><label for="brionic_seo_home_desc">Home description</label></th><td>
+                    <textarea class="large-text" rows="2" id="brionic_seo_home_desc" name="brionic_seo_home_desc" placeholder="<?php echo esc_attr(get_bloginfo('description')); ?>"><?php echo esc_textarea($seoHomeD); ?></textarea>
+                    <p class="description">Meta description for the front page. Other pages use their excerpt or content automatically.</p>
+                </td></tr>
+                <tr><th scope="row"><label for="brionic_seo_og_image">Default share image</label></th><td>
+                    <input type="url" class="regular-text" id="brionic_seo_og_image" name="brionic_seo_og_image" value="<?php echo esc_attr($seoOgImg); ?>" placeholder="Optional — falls back to the site icon">
+                    <p class="description">Shown in social previews when a page has no featured image.</p>
+                </td></tr>
+                <tr><th scope="row"><label for="brionic_seo_org_name">Organisation name</label></th><td>
+                    <input type="text" class="regular-text" id="brionic_seo_org_name" name="brionic_seo_org_name" value="<?php echo esc_attr($seoOrgName); ?>" placeholder="<?php echo esc_attr(get_bloginfo('name')); ?>">
+                    <p class="description">Used in structured data. Blank = site name.</p>
+                </td></tr>
+                <tr><th scope="row"><label for="brionic_seo_org_logo">Organisation logo</label></th><td>
+                    <input type="url" class="regular-text" id="brionic_seo_org_logo" name="brionic_seo_org_logo" value="<?php echo esc_attr($seoOrgLogo); ?>" placeholder="Optional — falls back to the site icon">
+                    <p class="description">Logo URL for structured data (helps search engines show your brand).</p>
+                </td></tr>
+            </table>
+            <?php submit_button('Save SEO settings'); ?>
         </form>
 
         <?php elseif ($tab === 'email'): ?>
