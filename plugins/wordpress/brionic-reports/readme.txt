@@ -3,7 +3,7 @@ Contributors: brionicsecurity
 Tags: analytics, privacy, statistics, stats
 Requires at least: 5.0
 Requires PHP: 7.2
-Stable tag: 1.0.2
+Stable tag: 1.0.3
 License: MIT
 
 Privacy-first website analytics by Brionic Reports. No cookies, no personal data.
@@ -27,6 +27,9 @@ filled in. Just install and activate.
 That's it — analytics start flowing to your dashboard immediately.
 
 == Changelog ==
+
+= 1.0.3 =
+* The built-in (downloaded) site key now always applies, so the plugin works with zero setup even on hosts whose option storage is unreliable.
 
 = 1.0.2 =
 * Added a "Test connection" button that checks connectivity to Brionic Reports from your server.

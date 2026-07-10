@@ -3,7 +3,7 @@
  * Plugin Name:       Brionic Reports
  * Plugin URI:        https://reports.brionicsecurity.com
  * Description:       Adds privacy-first Brionic Reports analytics to your WordPress site. No cookies, no personal data collected.
- * Version:           1.0.2
+ * Version:           1.0.3
  * Author:            Brionic Security
  * Author URI:        https://brionicsecurity.com
  * License:           MIT
@@ -22,13 +22,17 @@ if (!defined('ABSPATH')) {
 define('BRIONIC_REPORTS_DEFAULT_KEY', '__SITE_KEY__');
 define('BRIONIC_REPORTS_SRC', '__TRACKER_SRC__');
 
-/** The configured site key (option overrides the baked-in default). */
+/**
+ * The active site key. A plugin downloaded from the dashboard has the key baked
+ * in (BRIONIC_REPORTS_DEFAULT_KEY) — that always wins, so it works with no setup
+ * and is immune to hosts whose option storage is unreliable. Only an unbaked
+ * copy falls back to the key saved on the settings page.
+ */
 function brionic_reports_key() {
-    $key = trim((string) get_option('brionic_reports_site_key', ''));
-    if ($key === '') {
-        $key = BRIONIC_REPORTS_DEFAULT_KEY;
+    if (BRIONIC_REPORTS_DEFAULT_KEY !== '__SITE_KEY__') {
+        return BRIONIC_REPORTS_DEFAULT_KEY;
     }
-    return $key;
+    return trim((string) get_option('brionic_reports_site_key', ''));
 }
 
 /** On activation, seed the option with the baked-in key if not already set. */
@@ -131,12 +135,16 @@ function brionic_reports_settings_page() {
     }
 
     $saved = trim((string) get_option('brionic_reports_site_key', ''));
+    $baked = (BRIONIC_REPORTS_DEFAULT_KEY !== '__SITE_KEY__');
     $key = brionic_reports_key();
     $active = ($key !== '' && $key !== '__SITE_KEY__');
     ?>
     <div class="wrap">
         <h1>Brionic Reports</h1>
         <p>Privacy-first analytics. Once a site key is set, a lightweight tracker is added to every page&mdash;no cookies, no personal data.</p>
+        <?php if ($baked): ?>
+            <div class="notice notice-info inline"><p>This plugin was downloaded from your dashboard with the site key <strong>built in</strong> &mdash; no configuration needed.</p></div>
+        <?php endif; ?>
         <form action="" method="post">
             <?php wp_nonce_field('brionic_reports_save'); ?>
             <input type="hidden" name="brionic_reports_save" value="1">
@@ -145,10 +153,12 @@ function brionic_reports_settings_page() {
                     <th scope="row"><label for="brionic_reports_site_key">Site key</label></th>
                     <td>
                         <input name="brionic_reports_site_key" id="brionic_reports_site_key" type="text"
-                               class="regular-text" value="<?php echo esc_attr($saved !== '' ? $saved : (BRIONIC_REPORTS_DEFAULT_KEY !== '__SITE_KEY__' ? BRIONIC_REPORTS_DEFAULT_KEY : '')); ?>"
-                               placeholder="Paste your key here — starts with site_">
+                               class="regular-text" value="<?php echo esc_attr($baked ? BRIONIC_REPORTS_DEFAULT_KEY : $saved); ?>"
+                               placeholder="Paste your key here — starts with site_" <?php echo $baked ? 'readonly' : ''; ?>>
                         <p class="description">
-                            <?php if ($saved !== ''): ?>
+                            <?php if ($baked): ?>
+                                Built into this download: <code><?php echo esc_html(BRIONIC_REPORTS_DEFAULT_KEY); ?></code>. Nothing to save.
+                            <?php elseif ($saved !== ''): ?>
                                 Currently saved: <code><?php echo esc_html($saved); ?></code>
                             <?php else: ?>
                                 <strong style="color:#c0341d">No key saved yet.</strong> Paste the site key from your Brionic Reports dashboard (the site&rsquo;s settings page) and click Save.
@@ -157,7 +167,7 @@ function brionic_reports_settings_page() {
                     </td>
                 </tr>
             </table>
-            <?php submit_button('Save changes'); ?>
+            <?php if (!$baked): ?><?php submit_button('Save changes'); ?><?php endif; ?>
         </form>
 
         <hr>
