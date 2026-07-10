@@ -6,12 +6,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="robots" content="noindex, nofollow">
   <title>Sign in · Brionic Reports</title>
+  <link rel="icon" type="image/png" href="<?= asset('img/brionic-icon.png') ?>">
   <link rel="stylesheet" href="<?= asset('app.css') ?>">
 </head>
 <body>
   <div class="login-wrap">
     <div class="login">
-      <div class="brand" style="justify-content:center;margin-bottom:20px"><span class="dot"></span> Brionic Reports</div>
+      <div class="login-brand"><img src="<?= asset('img/brionic-logo.webp') ?>" alt="Brionic Security"></div>
       <div class="card">
         <h2>Operator sign in</h2>
         <?php if (!empty($error)): ?><div class="flash err"><?= e($error) ?></div><?php endif; ?>
