@@ -3,7 +3,7 @@
  * Plugin Name:       Brionic Config
  * Plugin URI:        https://reports.brionicsecurity.com
  * Description:       Brionic all-in-one WordPress config: analytics, SEO, email controls, automatic-update management, a branded login page, an under-construction mode, and cache tools — one plugin for your Brionic-managed site.
- * Version:           1.3.4
+ * Version:           1.3.3
  * Author:            Brionic Security
  * Author URI:        https://brionicsecurity.com
  * License:           MIT
@@ -416,16 +416,29 @@ function brionic_seo_title() {
 function brionic_seo_description() {
     if (is_front_page()) {
         $d = trim((string) get_option('brionic_seo_home_desc', ''));
-        return $d !== '' ? $d : get_bloginfo('description');
+        if ($d !== '') {
+            return $d;
+        }
+        $tag = trim((string) get_bloginfo('description'));
+        if ($tag !== '') {
+            return $tag;
+        }
+        // No tagline set: on a static front page, derive one automatically from
+        // the page's own content so the homepage is never left without a
+        // description.
+        $front = (int) get_option('page_on_front');
+        if ($front) {
+            $auto = brionic_seo_post_description(get_post($front));
+            if ($auto !== '') {
+                return $auto;
+            }
+        }
+        return '';
     }
     if (is_singular()) {
-        $post = get_queried_object();
-        if ($post instanceof WP_Post) {
-            if (has_excerpt($post)) {
-                return brionic_seo_trim(wp_strip_all_tags(get_the_excerpt($post)));
-            }
-            $c = wp_strip_all_tags(strip_shortcodes((string) $post->post_content));
-            return brionic_seo_trim($c);
+        $auto = brionic_seo_post_description(get_queried_object());
+        if ($auto !== '') {
+            return $auto;
         }
     }
     if (is_category() || is_tag() || is_tax()) {
@@ -435,6 +448,23 @@ function brionic_seo_description() {
         }
     }
     return get_bloginfo('description');
+}
+
+/** Derive a meta description from a post/page's excerpt or content. */
+function brionic_seo_post_description($post) {
+    if (!($post instanceof WP_Post)) {
+        return '';
+    }
+    if (has_excerpt($post)) {
+        return brionic_seo_trim(wp_strip_all_tags(get_the_excerpt($post)));
+    }
+    $c = (string) $post->post_content;
+    if (function_exists('excerpt_remove_blocks')) {
+        $c = excerpt_remove_blocks($c); // drop Gutenberg block delimiters
+    }
+    $c = wp_strip_all_tags(strip_shortcodes($c)); // drop shortcodes/page-builder markup
+    $c = trim(preg_replace('/\s+/', ' ', $c));
+    return $c !== '' ? brionic_seo_trim($c) : '';
 }
 
 /** Best canonical URL for the current request. */
