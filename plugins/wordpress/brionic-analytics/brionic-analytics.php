@@ -3,7 +3,7 @@
  * Plugin Name:       Brionic Config
  * Plugin URI:        https://reports.brionicsecurity.com
  * Description:       Brionic all-in-one WordPress config: analytics, SEO, email controls, automatic-update management, a branded login page, an under-construction mode, and cache tools — one plugin for your Brionic-managed site.
- * Version:           1.3.1
+ * Version:           1.3.2
  * Author:            Brionic Security
  * Author URI:        https://brionicsecurity.com
  * License:           MIT
@@ -58,7 +58,10 @@ add_action('wp_head', function () {
 }, 1);
 
 // Load the tracker the standard WordPress way so caching/optimisation plugins
-// keep it (raw wp_head output is sometimes stripped or combined away).
+// keep it (raw wp_head output is sometimes stripped or combined away). The extra
+// attributes + filters below tell optimisers (SiteGround Speed Optimizer, WP
+// Rocket, Cloudflare Rocket Loader, etc.) to leave this tiny external script
+// alone, so it is never combined/minified/removed and analytics keep working.
 add_action('wp_enqueue_scripts', function () {
     $key = brionic_analytics_key();
     if (strncmp($key, 'site_', 5) !== 0) {
@@ -71,8 +74,21 @@ add_filter('script_loader_tag', function ($tag, $handle, $src) {
         return $tag;
     }
     $key = brionic_analytics_key();
-    return '<script defer data-site="' . esc_attr($key) . '" data-via="wordpress" src="' . esc_url($src) . '"></script>' . "\n";
+    return '<script defer data-no-optimize="1" data-no-minify="1" data-no-defer="1" data-cfasync="false"'
+        . ' data-site="' . esc_attr($key) . '" data-via="wordpress" src="' . esc_url($src) . '"></script>' . "\n";
 }, 10, 3);
+
+// Explicitly exclude the tracker from SiteGround Speed Optimizer's JS handling.
+foreach (['sgo_js_minify_exclude', 'sgo_javascript_combine_exclude', 'sgo_js_async_exclude', 'sgo_javascript_combine_exclude_defer'] as $brionic_sgo_filter) {
+    add_filter($brionic_sgo_filter, function ($excluded) {
+        foreach (['brionic-analytics', 'b.js', 'reports.brionicsecurity.com'] as $needle) {
+            if (!in_array($needle, (array) $excluded, true)) {
+                $excluded[] = $needle;
+            }
+        }
+        return $excluded;
+    });
+}
 
 /** Base URL of the Brionic Reports instance (derived from the tracker URL). */
 function brionic_analytics_base() {
