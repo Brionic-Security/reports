@@ -3,7 +3,7 @@
  * Plugin Name:       Brionic Reports
  * Plugin URI:        https://reports.brionicsecurity.com
  * Description:       Adds privacy-first Brionic Reports analytics to your WordPress site. No cookies, no personal data collected.
- * Version:           1.0.0
+ * Version:           1.0.1
  * Author:            Brionic Security
  * Author URI:        https://brionicsecurity.com
  * License:           MIT
@@ -66,43 +66,49 @@ add_action('admin_menu', function () {
     );
 });
 
-add_action('admin_init', function () {
-    register_setting('brionic_reports', 'brionic_reports_site_key', [
-        'type'              => 'string',
-        'sanitize_callback' => 'sanitize_text_field',
-        'default'           => '',
-    ]);
-});
-
 function brionic_reports_settings_page() {
     if (!current_user_can('manage_options')) {
         return;
     }
+
+    // Self-contained, nonce-protected save (does not rely on the Settings API,
+    // which can be blocked by some hosts/security plugins).
+    if (isset($_POST['brionic_reports_save']) && check_admin_referer('brionic_reports_save')) {
+        $val = isset($_POST['brionic_reports_site_key'])
+            ? sanitize_text_field(wp_unslash($_POST['brionic_reports_site_key']))
+            : '';
+        update_option('brionic_reports_site_key', $val);
+        echo '<div class="notice notice-success is-dismissible"><p>Saved.</p></div>';
+    }
+
+    $saved = trim((string) get_option('brionic_reports_site_key', ''));
     $key = brionic_reports_key();
+    $active = ($key !== '' && $key !== '__SITE_KEY__');
     ?>
     <div class="wrap">
         <h1>Brionic Reports</h1>
         <p>Privacy-first analytics. Once a site key is set, a lightweight tracker is added to every page&mdash;no cookies, no personal data.</p>
-        <form action="options.php" method="post">
-            <?php settings_fields('brionic_reports'); ?>
+        <form action="" method="post">
+            <?php wp_nonce_field('brionic_reports_save'); ?>
+            <input type="hidden" name="brionic_reports_save" value="1">
             <table class="form-table" role="presentation">
                 <tr>
                     <th scope="row"><label for="brionic_reports_site_key">Site key</label></th>
                     <td>
                         <input name="brionic_reports_site_key" id="brionic_reports_site_key" type="text"
-                               class="regular-text" value="<?php echo esc_attr(get_option('brionic_reports_site_key', '')); ?>"
+                               class="regular-text" value="<?php echo esc_attr($saved !== '' ? $saved : (BRIONIC_REPORTS_DEFAULT_KEY !== '__SITE_KEY__' ? BRIONIC_REPORTS_DEFAULT_KEY : '')); ?>"
                                placeholder="site_xxxxxxxxxxxxxxxxxxxx">
-                        <p class="description">From your Brionic Reports dashboard &rarr; the site&rsquo;s settings page.</p>
+                        <p class="description">From your Brionic Reports dashboard &rarr; the site&rsquo;s settings page. If you downloaded this plugin from the dashboard, it is already filled in.</p>
                     </td>
                 </tr>
             </table>
             <?php submit_button('Save changes'); ?>
         </form>
         <p><strong>Status:</strong>
-            <?php if ($key !== '' && $key !== '__SITE_KEY__'): ?>
-                <span style="color:#12996b">Active</span> &mdash; tracking with key <code><?php echo esc_html($key); ?></code>.
+            <?php if ($active): ?>
+                <span style="color:#12996b;font-weight:600">&#10003; Active</span> &mdash; tracking with key <code><?php echo esc_html($key); ?></code>.
             <?php else: ?>
-                <span style="color:#c0341d">Not configured</span> &mdash; enter your site key above.
+                <span style="color:#c0341d;font-weight:600">Not configured</span> &mdash; enter your site key above and click Save.
             <?php endif; ?>
         </p>
     </div>
