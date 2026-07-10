@@ -3,7 +3,7 @@
  * Plugin Name:       Brionic Config
  * Plugin URI:        https://reports.brionicsecurity.com
  * Description:       Brionic all-in-one WordPress config: analytics, SEO, email controls, automatic-update management, a branded login page, an under-construction mode, and cache tools — one plugin for your Brionic-managed site.
- * Version:           1.3.0
+ * Version:           1.3.1
  * Author:            Brionic Security
  * Author URI:        https://brionicsecurity.com
  * License:           MIT
@@ -314,23 +314,25 @@ add_action('template_redirect', function () {
 // ── Brionic SEO ─────────────────────────────────────────────────────────────
 // A self-contained, zero-config SEO engine: titles, meta description, canonical,
 // robots, Open Graph, Twitter cards and JSON-LD schema. Deterministic (no AI, no
-// external calls). Stays dormant while another SEO plugin (Yoast, Rank Math, AIO
-// SEO, SEOPress, The SEO Framework) is active, so it never double-outputs tags —
-// deactivate the other plugin and Brionic SEO takes over automatically.
+// external calls). On by default — it optimises everything automatically. As a
+// safety net it stays dormant while another SEO plugin is active, so it never
+// double-outputs tags; disable the other plugin and it takes over automatically.
 
-/** Returns the name of a competing SEO plugin if one is active, else ''. */
+/** Returns a label if a competing SEO plugin is active, else '' (empty). */
 function brionic_seo_competitor() {
-    if (defined('WPSEO_VERSION'))                                 return 'Yoast SEO';
-    if (defined('RANK_MATH_VERSION') || class_exists('RankMath')) return 'Rank Math';
-    if (defined('AIOSEO_VERSION') || function_exists('aioseo'))   return 'All in One SEO';
-    if (defined('SEOPRESS_VERSION'))                              return 'SEOPress';
-    if (defined('THE_SEO_FRAMEWORK_VERSION'))                     return 'The SEO Framework';
+    if (defined('WPSEO_VERSION')
+        || defined('RANK_MATH_VERSION') || class_exists('RankMath')
+        || defined('AIOSEO_VERSION') || function_exists('aioseo')
+        || defined('SEOPRESS_VERSION')
+        || defined('THE_SEO_FRAMEWORK_VERSION')) {
+        return 'another SEO plugin';
+    }
     return '';
 }
 
 /** True only when Brionic SEO is enabled AND no competing SEO plugin is active. */
 function brionic_seo_active() {
-    return get_option('brionic_seo_enabled', '0') === '1' && brionic_seo_competitor() === '';
+    return get_option('brionic_seo_enabled', '1') === '1' && brionic_seo_competitor() === '';
 }
 
 /** Trim to a length on a word boundary with an ellipsis. */
@@ -428,7 +430,7 @@ function brionic_seo_image() {
 
 // Force the theme to use the WordPress <title> tag so our filter applies.
 add_action('after_setup_theme', function () {
-    if (get_option('brionic_seo_enabled', '0') === '1') {
+    if (get_option('brionic_seo_enabled', '1') === '1') {
         add_theme_support('title-tag');
     }
 }, 99);
@@ -569,7 +571,7 @@ add_action('admin_notices', function () {
     if (!current_user_can('manage_options')) {
         return;
     }
-    if (get_option('brionic_seo_enabled', '0') !== '1') {
+    if (get_option('brionic_seo_enabled', '1') !== '1') {
         return;
     }
     $competitor = brionic_seo_competitor();
@@ -577,8 +579,8 @@ add_action('admin_notices', function () {
         return;
     }
     echo '<div class="notice notice-warning"><p><strong>Brionic SEO is waiting.</strong> '
-        . esc_html($competitor) . ' is still active, so Brionic SEO is dormant to avoid duplicate tags. '
-        . 'Deactivate ' . esc_html($competitor) . ' and Brionic SEO will take over automatically.</p></div>';
+        . 'Another SEO plugin is still active, so Brionic SEO is staying dormant to avoid duplicate tags. '
+        . 'Disable the other SEO plugin and Brionic SEO takes over automatically.</p></div>';
 });
 
 /** Settings page under Settings → Brionic Config. */
@@ -755,7 +757,7 @@ function brionic_analytics_settings_page() {
     $ucMessage   = (string) get_option('brionic_uc_message', '');
     $ucLogo      = (string) get_option('brionic_uc_logo_url', '');
     $ucBg        = (string) get_option('brionic_uc_bg_url', '');
-    $seoOn       = get_option('brionic_seo_enabled', '0') === '1';
+    $seoOn       = get_option('brionic_seo_enabled', '1') === '1';
     $seoSocial   = get_option('brionic_seo_social', '1') === '1';
     $seoSchema   = get_option('brionic_seo_schema', '1') === '1';
     $seoNoArch   = get_option('brionic_seo_noindex_archives', '0') === '1';
@@ -836,19 +838,19 @@ function brionic_analytics_settings_page() {
 
         <?php elseif ($tab === 'seo'): ?>
         <h2>SEO</h2>
-        <p>Automatic, zero-config search-engine optimisation: page titles, meta descriptions, canonical URLs, Open Graph &amp; Twitter cards, and schema.org structured data &mdash; generated from your content. No keywords to fill in.</p>
+        <p>Brionic optimises your SEO <strong>automatically</strong> &mdash; page titles, meta descriptions, canonical URLs, Open Graph &amp; Twitter cards, and schema.org structured data are generated from your content. It&rsquo;s on by default and needs no setup; the fields below are optional overrides if you want to fine-tune anything.</p>
         <?php if ($seoOn && $seoRival !== ''): ?>
-            <div class="notice notice-warning inline"><p><strong><?php echo esc_html($seoRival); ?> is still active.</strong> Brionic SEO stays dormant while another SEO plugin runs, to avoid duplicate tags. Deactivate <?php echo esc_html($seoRival); ?> and Brionic SEO takes over automatically.</p></div>
+            <div class="notice notice-warning inline"><p><strong>Another SEO plugin is still active.</strong> Brionic SEO stays dormant while another SEO plugin runs, to avoid duplicate tags. Disable the other plugin and Brionic SEO takes over automatically.</p></div>
         <?php elseif ($seoOn): ?>
-            <div class="notice notice-success inline"><p><strong>Brionic SEO is active</strong> and managing your site&rsquo;s search-engine tags.</p></div>
+            <div class="notice notice-success inline"><p><strong>Brionic SEO is active</strong> and optimising your site&rsquo;s search-engine tags automatically.</p></div>
         <?php endif; ?>
         <form action="" method="post">
             <?php wp_nonce_field('brionic_seo_save'); ?>
             <input type="hidden" name="brionic_seo_save" value="1">
             <table class="form-table" role="presentation">
                 <tr><th scope="row">Enable</th><td>
-                    <label><input type="checkbox" name="brionic_seo_enabled" <?php checked($seoOn); ?>> Manage this site&rsquo;s SEO with Brionic</label>
-                    <p class="description">Turn on, then deactivate Yoast (or any other SEO plugin) so Brionic SEO can take over.</p>
+                    <label><input type="checkbox" name="brionic_seo_enabled" <?php checked($seoOn); ?>> Optimise this site&rsquo;s SEO automatically with Brionic</label>
+                    <p class="description">On by default. If another SEO plugin is active, disable it so Brionic SEO can take over.</p>
                 </td></tr>
                 <tr><th scope="row">Output</th><td>
                     <label><input type="checkbox" name="brionic_seo_social" <?php checked($seoSocial); ?>> Open Graph &amp; Twitter card tags (social previews)</label><br>
