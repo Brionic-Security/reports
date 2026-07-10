@@ -48,12 +48,24 @@ add_action('wp_head', function () {
     // A comment marker is emitted even if an optimiser later strips the <script>,
     // so the connection validator can tell "active but stripped" from "inactive".
     printf("\n<!-- Brionic Reports active: %s -->\n", esc_html($key));
-    printf(
-        '<script defer data-site="%s" data-via="wordpress" src="%s"></script>' . "\n",
-        esc_attr($key),
-        esc_url(BRIONIC_REPORTS_SRC)
-    );
 }, 1);
+
+// Load the tracker the standard WordPress way so caching/optimisation plugins
+// keep it (raw wp_head output is sometimes stripped or combined away).
+add_action('wp_enqueue_scripts', function () {
+    $key = brionic_reports_key();
+    if ($key === '' || $key === '__SITE_KEY__') {
+        return;
+    }
+    wp_enqueue_script('brionic-reports', BRIONIC_REPORTS_SRC, [], null, false);
+});
+add_filter('script_loader_tag', function ($tag, $handle, $src) {
+    if ($handle !== 'brionic-reports') {
+        return $tag;
+    }
+    $key = brionic_reports_key();
+    return '<script defer data-site="' . esc_attr($key) . '" data-via="wordpress" src="' . esc_url($src) . '"></script>' . "\n";
+}, 10, 3);
 
 /** Base URL of the Brionic Reports instance (derived from the tracker URL). */
 function brionic_reports_base() {
