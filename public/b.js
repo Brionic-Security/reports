@@ -11,15 +11,26 @@
 (function () {
   'use strict';
   var script = document.currentScript;
-  if (!script) return;
-  var site = script.getAttribute('data-site');
+  // Config comes from the script tag's data-* attributes, but falls back to a
+  // window.__brionic global set by the host (e.g. the WordPress plugin). The
+  // fallback keeps analytics working even when a speed/optimiser plugin combines
+  // or inlines this external script, which drops the attributes and rewrites the
+  // script origin.
+  var cfg = window.__brionic || {};
+  var site = (script && script.getAttribute('data-site')) || cfg.site;
   if (!site) return;
 
   // How the tracker was installed (e.g. the WordPress plugin sets "wordpress").
-  var via = script.getAttribute('data-via') || '';
+  var via = (script && script.getAttribute('data-via')) || cfg.via || '';
 
-  // Endpoint = same origin the script was served from.
-  var endpoint = new URL(script.src).origin + '/collect';
+  // Endpoint = the Brionic Reports origin. Prefer the explicit config; otherwise
+  // derive it from this script's own URL.
+  var origin = cfg.origin || '';
+  if (!origin && script && script.src) {
+    try { origin = new URL(script.src).origin; } catch (e) {}
+  }
+  if (!origin) origin = location.origin;
+  var endpoint = origin + '/collect';
 
   function send(payload) {
     payload.s = site;

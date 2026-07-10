@@ -3,7 +3,7 @@
  * Plugin Name:       Brionic Config
  * Plugin URI:        https://reports.brionicsecurity.com
  * Description:       Brionic all-in-one WordPress config: analytics, SEO, email controls, automatic-update management, a branded login page, an under-construction mode, and cache tools — one plugin for your Brionic-managed site.
- * Version:           1.3.2
+ * Version:           1.3.3
  * Author:            Brionic Security
  * Author URI:        https://brionicsecurity.com
  * License:           MIT
@@ -68,6 +68,15 @@ add_action('wp_enqueue_scripts', function () {
         return;
     }
     wp_enqueue_script('brionic-analytics', BRIONIC_ANALYTICS_SRC, [], null, false);
+    // Expose the config as a global so the tracker still works even if an
+    // optimiser combines/inlines the external script (which drops the data-site
+    // attribute and rewrites the script origin).
+    wp_add_inline_script(
+        'brionic-analytics',
+        'window.__brionic={site:' . wp_json_encode($key)
+            . ',via:"wordpress",origin:' . wp_json_encode(brionic_analytics_base()) . '};',
+        'before'
+    );
 });
 add_filter('script_loader_tag', function ($tag, $handle, $src) {
     if ($handle !== 'brionic-analytics') {
