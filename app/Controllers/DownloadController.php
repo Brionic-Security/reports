@@ -23,7 +23,7 @@ final class DownloadController
             throw HttpException::notFound('Site not found.');
         }
 
-        $source = base_path('plugins/wordpress/brionic-reports');
+        $source = base_path('plugins/wordpress/brionic-analytics');
         if (!is_dir($source) || !class_exists(ZipArchive::class)) {
             throw HttpException::notFound('Plugin package is unavailable.');
         }
@@ -48,7 +48,7 @@ final class DownloadController
                 continue;
             }
             $path = $file->getPathname();
-            $local = 'brionic-reports/' . ltrim(substr($path, strlen($source)), '/\\');
+            $local = 'brionic-analytics/' . ltrim(substr($path, strlen($source)), '/\\');
             $contents = (string) file_get_contents($path);
             if (str_ends_with($path, '.php') || str_ends_with($path, '.txt')) {
                 $contents = strtr($contents, $replacements);
@@ -62,7 +62,7 @@ final class DownloadController
 
         return new Response($body, 200, [
             'Content-Type'        => 'application/zip',
-            'Content-Disposition' => 'attachment; filename="brionic-reports.zip"',
+            'Content-Disposition' => 'attachment; filename="brionic-analytics.zip"',
             'Content-Length'      => (string) strlen($body),
         ]);
     }
