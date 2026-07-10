@@ -3,7 +3,7 @@
  * Plugin Name:       Brionic Config
  * Plugin URI:        https://reports.brionicsecurity.com
  * Description:       Brionic all-in-one WordPress config: analytics, SEO, email controls, automatic-update management, a branded login page, an under-construction mode, and cache tools — one plugin for your Brionic-managed site.
- * Version:           1.3.3
+ * Version:           1.3.4
  * Author:            Brionic Security
  * Author URI:        https://brionicsecurity.com
  * License:           MIT
@@ -55,6 +55,15 @@ add_action('wp_head', function () {
     // A comment marker is emitted even if an optimiser later strips the <script>,
     // so the connection validator can tell "active but stripped" from "inactive".
     printf("\n<!-- Brionic Reports active: %s -->\n", esc_html($key));
+    // Expose the tracker config as a raw inline global in <head>. This is the
+    // authoritative source the tracker reads, so analytics keep working even when
+    // a speed plugin combines/inlines the external b.js (which drops its data-*
+    // attributes and rewrites its origin). Marked no-optimize so it stays inline.
+    printf(
+        '<script data-no-optimize="1" data-no-minify="1" data-cfasync="false">window.__brionic={site:%s,via:"wordpress",origin:%s};</script>' . "\n",
+        wp_json_encode($key),
+        wp_json_encode(brionic_analytics_base())
+    );
 }, 1);
 
 // Load the tracker the standard WordPress way so caching/optimisation plugins
