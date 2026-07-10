@@ -49,6 +49,31 @@ final class CollectController
         return $this->noContentCors();
     }
 
+    /**
+     * Server-side connection check used by the WordPress plugin's "Test
+     * connection" button. Validates the site key and records the check.
+     */
+    public function verify(Request $request): Response
+    {
+        $key = (string) ($request->query('key') ?? $request->input('key', ''));
+        $site = $key !== '' ? \App\Models\Site::findByPublicId($key) : null;
+
+        if ($site === null) {
+            return Response::json(['ok' => false, 'error' => 'unknown_site_key'], 404)
+                ->withHeader('Access-Control-Allow-Origin', '*')
+                ->withHeader('Cache-Control', 'no-store');
+        }
+
+        \App\Support\Database::run(
+            'UPDATE sites SET plugin_verified_at = ? WHERE id = ?',
+            [now(), (int) $site['id']]
+        );
+
+        return Response::json(['ok' => true, 'name' => (string) $site['name'], 'domain' => (string) $site['domain']])
+            ->withHeader('Access-Control-Allow-Origin', '*')
+            ->withHeader('Cache-Control', 'no-store');
+    }
+
     /** @return array<string,mixed> */
     private function payload(Request $request): array
     {

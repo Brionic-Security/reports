@@ -36,6 +36,9 @@ $this->layout('layout', ['title' => $site['name'] . ' settings · Brionic Report
         <span>Not connected yet &mdash; add one of the methods below, then reload your site. Data appears here within a minute.</span>
       </div>
     <?php endif; ?>
+    <?php if (!empty($conn['plugin_check'])): ?>
+      <p class="muted" style="font-size:.8rem;margin:-6px 0 12px">&#10003; WordPress plugin reached us (server test passed <?= e(time_ago($conn['plugin_check'])) ?>).<?= !$conn['any'] ? ' The plugin&rsquo;s key + connectivity are good — if no visits show, the tracker script isn&rsquo;t rendering on your pages (theme/optimiser).' : '' ?></p>
+    <?php endif; ?>
     <form method="post" action="<?= app_url('sites/' . $site['id'] . '/validate') ?>" style="margin:0 0 14px">
       <?= csrf_field() ?>
       <button class="btn btn-sm" type="submit">&#8635; Validate connection</button>

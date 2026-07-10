@@ -164,7 +164,13 @@ final class SiteController
                 $last = (string) $r['last'];
             }
         }
-        return ['any' => ($wp + $snippet) > 0, 'wordpress' => $wp, 'snippet' => $snippet, 'last' => $last];
+        return [
+            'any'          => ($wp + $snippet) > 0,
+            'wordpress'    => $wp,
+            'snippet'      => $snippet,
+            'last'         => $last,
+            'plugin_check' => \App\Support\Database::selectOne('SELECT plugin_verified_at FROM sites WHERE id = ?', [$siteId])['plugin_verified_at'] ?? null,
+        ];
     }
 
     public function update(Request $request, array $params): Response

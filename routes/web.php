@@ -22,6 +22,10 @@ return function (Router $router): void {
     $router->post('/collect', [CollectController::class, 'collect']);
     $router->options('/collect', [CollectController::class, 'options']);
 
+    // Server-side connection check for the WordPress plugin's "Test" button.
+    $router->get('/api/verify', [CollectController::class, 'verify']);
+    $router->post('/api/verify', [CollectController::class, 'verify']);
+
     // ── Auth ─────────────────────────────────────────────────────────────────
     $router->get('/login', [AuthController::class, 'showLogin'], ['guest']);
     $router->post('/login', [AuthController::class, 'login'], ['guest', 'csrf']);
