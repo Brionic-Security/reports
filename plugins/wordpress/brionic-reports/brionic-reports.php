@@ -146,8 +146,14 @@ function brionic_reports_settings_page() {
                     <td>
                         <input name="brionic_reports_site_key" id="brionic_reports_site_key" type="text"
                                class="regular-text" value="<?php echo esc_attr($saved !== '' ? $saved : (BRIONIC_REPORTS_DEFAULT_KEY !== '__SITE_KEY__' ? BRIONIC_REPORTS_DEFAULT_KEY : '')); ?>"
-                               placeholder="site_xxxxxxxxxxxxxxxxxxxx">
-                        <p class="description">From your Brionic Reports dashboard &rarr; the site&rsquo;s settings page. If you downloaded this plugin from the dashboard, it is already filled in.</p>
+                               placeholder="Paste your key here — starts with site_">
+                        <p class="description">
+                            <?php if ($saved !== ''): ?>
+                                Currently saved: <code><?php echo esc_html($saved); ?></code>
+                            <?php else: ?>
+                                <strong style="color:#c0341d">No key saved yet.</strong> Paste the site key from your Brionic Reports dashboard (the site&rsquo;s settings page) and click Save.
+                            <?php endif; ?>
+                        </p>
                     </td>
                 </tr>
             </table>
