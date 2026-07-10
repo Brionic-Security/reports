@@ -1,9 +1,9 @@
 <?php
 /**
- * Plugin Name:       Brionic Reports Analytics
+ * Plugin Name:       Brionic Reports
  * Plugin URI:        https://reports.brionicsecurity.com
- * Description:       Adds privacy-first Brionic Reports analytics to your WordPress site. No cookies, no personal data collected.
- * Version:           1.0.3
+ * Description:       Privacy-first Brionic Reports analytics, plus site email controls (From name/address, Reply-To, and a forwarded copy of every outgoing email).
+ * Version:           1.1.0
  * Author:            Brionic Security
  * Author URI:        https://brionicsecurity.com
  * License:           MIT
@@ -100,10 +100,52 @@ function brionic_analytics_test_connection() {
     return ['ok' => false, 'msg' => 'Unexpected response from Brionic Reports (HTTP ' . $code . '). Please try again.'];
 }
 
-/** Settings page under Settings → Brionic Reports. */
+// ── Site email controls ─────────────────────────────────────────────────────
+// Optional overrides for outgoing WordPress mail. Each is applied only when a
+// value is saved, so a blank field keeps the WordPress default.
+
+add_filter('wp_mail_from', function ($email) {
+    $from = sanitize_email((string) get_option('brionic_mail_from_email', ''));
+    return is_email($from) ? $from : $email;
+}, 99);
+
+add_filter('wp_mail_from_name', function ($name) {
+    $from = trim((string) get_option('brionic_mail_from_name', ''));
+    return $from !== '' ? $from : $name;
+}, 99);
+
+add_action('phpmailer_init', function ($phpmailer) {
+    $reply = sanitize_email((string) get_option('brionic_mail_reply_to', ''));
+    if (is_email($reply)) {
+        try { $phpmailer->addReplyTo($reply); } catch (\Exception $e) {}
+    }
+    $forward = sanitize_email((string) get_option('brionic_mail_forward_to', ''));
+    if (is_email($forward)) {
+        try { $phpmailer->addBCC($forward); } catch (\Exception $e) {}
+    }
+});
+
+/** Send a test email using the configured settings. */
+function brionic_mail_send_test($to) {
+    $to = sanitize_email((string) $to);
+    if (!is_email($to)) {
+        return ['ok' => false, 'msg' => 'Enter a valid email address to send the test to.'];
+    }
+    $sent = wp_mail(
+        $to,
+        'Brionic Reports — test email',
+        "This is a test email from your WordPress site, sent through Brionic Reports Config.\n\n"
+        . "If you received it, your From name/address, Reply-To and forwarding settings are working."
+    );
+    return $sent
+        ? ['ok' => true, 'msg' => 'Test email sent to ' . $to . '. Check that inbox (and your forward address, if set).']
+        : ['ok' => false, 'msg' => 'WordPress could not send the test email. Check your site\'s email/SMTP configuration.'];
+}
+
+/** Settings page under Settings → Brionic Reports Config. */
 add_action('admin_menu', function () {
     add_options_page(
-        'Brionic Reports',
+        'Brionic Reports Config',
         'Brionic Reports',
         'manage_options',
         'brionic-analytics',
@@ -134,13 +176,34 @@ function brionic_analytics_settings_page() {
         echo '<div class="notice ' . esc_attr($cls) . ' is-dismissible"><p>' . esc_html($test['msg']) . '</p></div>';
     }
 
+    // Email settings save.
+    if (isset($_POST['brionic_mail_save']) && check_admin_referer('brionic_mail_save')) {
+        update_option('brionic_mail_from_name', sanitize_text_field(wp_unslash($_POST['brionic_mail_from_name'] ?? '')));
+        update_option('brionic_mail_from_email', sanitize_email(wp_unslash($_POST['brionic_mail_from_email'] ?? '')));
+        update_option('brionic_mail_reply_to', sanitize_email(wp_unslash($_POST['brionic_mail_reply_to'] ?? '')));
+        update_option('brionic_mail_forward_to', sanitize_email(wp_unslash($_POST['brionic_mail_forward_to'] ?? '')));
+        echo '<div class="notice notice-success is-dismissible"><p>Email settings saved.</p></div>';
+    }
+
+    // Send a test email.
+    if (isset($_POST['brionic_mail_test']) && check_admin_referer('brionic_mail_test')) {
+        $r = brionic_mail_send_test(wp_unslash($_POST['brionic_mail_test_to'] ?? ''));
+        echo '<div class="notice ' . ($r['ok'] ? 'notice-success' : 'notice-error') . ' is-dismissible"><p>' . esc_html($r['msg']) . '</p></div>';
+    }
+
     $saved = trim((string) get_option('brionic_analytics_site_key', ''));
     $baked = (BRIONIC_ANALYTICS_DEFAULT_KEY !== '__SITE_KEY__');
     $key = brionic_analytics_key();
     $active = ($key !== '' && $key !== '__SITE_KEY__');
+    $mFromName  = (string) get_option('brionic_mail_from_name', '');
+    $mFromEmail = (string) get_option('brionic_mail_from_email', '');
+    $mReplyTo   = (string) get_option('brionic_mail_reply_to', '');
+    $mForward   = (string) get_option('brionic_mail_forward_to', '');
+    $adminEmail = (string) get_option('admin_email', '');
     ?>
     <div class="wrap">
-        <h1>Brionic Reports</h1>
+        <h1>Brionic Reports Config</h1>
+        <h2>Website analytics</h2>
         <p>Privacy-first analytics. Once a site key is set, a lightweight tracker is added to every page&mdash;no cookies, no personal data.</p>
         <?php if ($baked): ?>
             <div class="notice notice-info inline"><p>This plugin was downloaded from your dashboard with the site key <strong>built in</strong> &mdash; no configuration needed.</p></div>
@@ -184,6 +247,46 @@ function brionic_analytics_settings_page() {
             <input type="hidden" name="brionic_analytics_test" value="1">
             <button type="submit" class="button button-secondary">Test connection</button>
             <span class="description" style="margin-left:8px">Checks that your server can reach Brionic Reports and that the site key is valid.</span>
+        </form>
+
+        <hr>
+        <h2>Email settings</h2>
+        <p>Customise the address WordPress sends email from, set a reply-to address, and optionally forward a blind copy (BCC) of every outgoing email. Each field is optional &mdash; leave it blank to keep the WordPress default.</p>
+        <form action="" method="post">
+            <?php wp_nonce_field('brionic_mail_save'); ?>
+            <input type="hidden" name="brionic_mail_save" value="1">
+            <table class="form-table" role="presentation">
+                <tr>
+                    <th scope="row"><label for="brionic_mail_from_name">From name</label></th>
+                    <td><input type="text" class="regular-text" id="brionic_mail_from_name" name="brionic_mail_from_name" value="<?php echo esc_attr($mFromName); ?>" placeholder="e.g. Your Business Name">
+                        <p class="description">The sender name recipients see.</p></td>
+                </tr>
+                <tr>
+                    <th scope="row"><label for="brionic_mail_from_email">From email</label></th>
+                    <td><input type="email" class="regular-text" id="brionic_mail_from_email" name="brionic_mail_from_email" value="<?php echo esc_attr($mFromEmail); ?>" placeholder="<?php echo esc_attr($adminEmail); ?>">
+                        <p class="description">The From address for outgoing mail. Use an address on your own domain for best deliverability.</p></td>
+                </tr>
+                <tr>
+                    <th scope="row"><label for="brionic_mail_reply_to">Reply-To email</label></th>
+                    <td><input type="email" class="regular-text" id="brionic_mail_reply_to" name="brionic_mail_reply_to" value="<?php echo esc_attr($mReplyTo); ?>" placeholder="(optional)">
+                        <p class="description">Where replies go, if different from the From address.</p></td>
+                </tr>
+                <tr>
+                    <th scope="row"><label for="brionic_mail_forward_to">Forward a copy to</label></th>
+                    <td><input type="email" class="regular-text" id="brionic_mail_forward_to" name="brionic_mail_forward_to" value="<?php echo esc_attr($mForward); ?>" placeholder="(optional)">
+                        <p class="description">A blind copy (BCC) of <strong>every</strong> email your site sends will be forwarded here. Leave blank to disable.</p></td>
+                </tr>
+            </table>
+            <?php submit_button('Save email settings'); ?>
+        </form>
+
+        <h3>Send a test email</h3>
+        <form action="" method="post">
+            <?php wp_nonce_field('brionic_mail_test'); ?>
+            <input type="hidden" name="brionic_mail_test" value="1">
+            <input type="email" class="regular-text" name="brionic_mail_test_to" value="<?php echo esc_attr($adminEmail); ?>">
+            <button type="submit" class="button button-secondary">Send test email</button>
+            <p class="description">Save your settings first, then send a test to confirm From/Reply-To and forwarding work.</p>
         </form>
     </div>
     <?php
