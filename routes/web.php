@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Controllers\AuthController;
 use App\Controllers\CollectController;
 use App\Controllers\DashboardController;
+use App\Controllers\DownloadController;
 use App\Controllers\ReportController;
 use App\Controllers\SiteController;
 use App\Support\Response;
@@ -38,6 +39,7 @@ return function (Router $router): void {
         $r->get('/sites/{id}/export.csv', [DashboardController::class, 'exportSite']);
         $r->get('/sites/{id}/realtime.json', [DashboardController::class, 'realtimeSite']);
         $r->get('/sites/{id}/settings', [SiteController::class, 'show']);
+        $r->get('/sites/{id}/plugin.zip', [DownloadController::class, 'wordpressPlugin']);
         $r->post('/sites/{id}', [SiteController::class, 'update'], ['csrf']);
         $r->post('/sites/{id}/delete', [SiteController::class, 'destroy'], ['csrf']);
 

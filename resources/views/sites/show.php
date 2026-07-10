@@ -15,12 +15,29 @@ $this->layout('layout', ['title' => $site['name'] . ' settings · Brionic Report
 <?php if (!empty($ok)): ?><div class="flash"><?= e($ok) ?></div><?php endif; ?>
 <?php if (!empty($error)): ?><div class="flash err"><?= e($error) ?></div><?php endif; ?>
 
-<div class="grid grid-2">
+<div class="grid">
   <div class="card">
-    <h2>Install snippet</h2>
-    <p class="muted" style="margin-top:0">Paste this once into the <code>&lt;head&gt;</code> of every page you want to track. Plug-and-play — no other setup.</p>
-    <code class="code"><?= e($snippet) ?></code>
-    <p class="muted mt" style="font-size:.82rem">Site key: <code><?= e($site['public_id']) ?></code></p>
+    <h2>Connect this website</h2>
+    <p class="muted" style="margin-top:0">Pick whichever is easiest — tracking is plug-and-play, privacy-first, and never uses cookies.</p>
+
+    <div class="connect-method">
+      <h3><span class="cm-num">1</span> WordPress <span class="cm-tag">easiest</span></h3>
+      <p class="muted">Your site key is baked into the download. In WordPress go to <strong>Plugins &rarr; Add New &rarr; Upload Plugin</strong>, upload the file, then click <strong>Activate</strong>.</p>
+      <a class="btn btn-primary btn-sm" href="<?= app_url('sites/' . $site['id'] . '/plugin.zip') ?>">&#8681; Download WordPress plugin</a>
+    </div>
+
+    <div class="connect-method">
+      <h3><span class="cm-num">2</span> Any website (HTML)</h3>
+      <p class="muted">Paste this once, just before the closing <code>&lt;/head&gt;</code> tag, on every page you want to track.</p>
+      <code class="code"><?= e($snippet) ?></code>
+    </div>
+
+    <div class="connect-method">
+      <h3><span class="cm-num">3</span> Google Tag Manager, Shopify, Wix, Squarespace&hellip;</h3>
+      <p class="muted">Add a <strong>Custom HTML</strong> tag (GTM) or paste the snippet above into your theme&rsquo;s header / custom-code area, set to load on all pages.</p>
+    </div>
+
+    <p class="muted mt" style="font-size:.82rem">Site key: <code><?= e($site['public_id']) ?></code> &middot; data flows in within a minute of your first visit.</p>
   </div>
 
   <div class="card">

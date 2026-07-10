@@ -315,15 +315,16 @@ final class Email
         $app = self::esc((string) config('app.name'));
         $year = date('Y');
         $support = self::esc((string) config('mail.support_email'));
+        $logo = self::esc(asset('img/brionic-icon.png'));
 
         $html = '<!DOCTYPE html><html><head><meta charset="utf-8">'
             . '<meta name="viewport" content="width=device-width, initial-scale=1.0"></head>'
             . '<body style="margin:0;padding:0;background:#0b0d12;font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',Roboto,Helvetica,Arial,sans-serif;">'
             . '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#0b0d12;padding:28px 12px;"><tr><td align="center">'
             . '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:640px;background:#ffffff;border-radius:14px;overflow:hidden;">'
-            . '<tr><td style="background:' . self::DARK . ';padding:18px 40px;" align="left">'
-            . '<span style="display:inline-block;width:11px;height:11px;border-radius:50%;background:' . self::RED . ';vertical-align:middle;"></span>'
-            . '<span style="color:#ffffff;font-size:16px;font-weight:800;vertical-align:middle;margin-left:9px;">' . $app . '</span>'
+            . '<tr><td style="background:' . self::DARK . ';padding:16px 40px;" align="left">'
+            . '<img src="' . $logo . '" width="26" height="26" alt="" style="vertical-align:middle;border:0;display:inline-block;">'
+            . '<span style="color:#ffffff;font-size:16px;font-weight:800;vertical-align:middle;margin-left:10px;">' . $app . '</span>'
             . '</td></tr>'
             . '<tr><td style="height:4px;background:' . self::RED . ';font-size:0;line-height:0;">&nbsp;</td></tr>'
             . '<tr><td style="padding:34px 40px;color:' . self::INK . ';font-size:15px;line-height:1.6;">' . $bodyHtml . '</td></tr>'

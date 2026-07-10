@@ -201,3 +201,13 @@ h2 { font-size: 1.15rem; margin: 0 0 14px; letter-spacing: -0.01em; }
 
 /* Live stat highlight */
 .stat.live .n { display: flex; align-items: center; gap: 8px; color: var(--text); }
+
+/* Connect-this-website methods */
+.connect-method { border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; margin-top: 14px; background: #fbfbfd; }
+.connect-method h3 { display: flex; align-items: center; gap: 8px; margin: 0 0 6px; font-size: 1rem; }
+.connect-method p { margin: 0 0 10px; font-size: .88rem; }
+.connect-method .code { margin-top: 6px; }
+.cm-num { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 50%; background: var(--accent); color: #fff; font-size: .78rem; font-weight: 800; flex: none; }
+.cm-tag { font-size: .68rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--green); background: rgba(18,153,107,.12); border-radius: 999px; padding: 2px 8px; }
+code { background: var(--panel-2); border-radius: 5px; padding: 1px 5px; font: .86em var(--font-mono); }
+.code code { background: none; padding: 0; }
