@@ -3,7 +3,7 @@ Contributors: brionicsecurity
 Tags: analytics, privacy, statistics, stats
 Requires at least: 5.0
 Requires PHP: 7.2
-Stable tag: 1.1.0
+Stable tag: 1.2.0
 License: MIT
 
 Privacy-first website analytics by Brionic Reports. No cookies, no personal data.
@@ -27,6 +27,10 @@ filled in. Just install and activate.
 That's it — analytics start flowing to your dashboard immediately.
 
 == Changelog ==
+
+= 1.2.0 =
+* Added Automatic updates management (core minor/major, plugins, themes) with an email summary after the updater runs.
+* Added a branded Login page (Brionic logo + full-page background; ships with the Brionic logo and a geometric red/blue wallpaper by default).
 
 = 1.1.0 =
 * Added Email settings: From name, From email, Reply-To, and forward a BCC copy of every outgoing email, plus a test-email tool. Settings page renamed to "Brionic Reports Config".

@@ -2,8 +2,8 @@
 /**
  * Plugin Name:       Brionic Reports
  * Plugin URI:        https://reports.brionicsecurity.com
- * Description:       Privacy-first Brionic Reports analytics, plus site email controls (From name/address, Reply-To, and a forwarded copy of every outgoing email).
- * Version:           1.1.0
+ * Description:       Brionic Reports analytics, email controls, automatic-update management with notifications, and a branded login page — one plugin for your Brionic-managed WordPress site.
+ * Version:           1.2.0
  * Author:            Brionic Security
  * Author URI:        https://brionicsecurity.com
  * License:           MIT
@@ -142,6 +142,103 @@ function brionic_mail_send_test($to) {
         : ['ok' => false, 'msg' => 'WordPress could not send the test email. Check your site\'s email/SMTP configuration.'];
 }
 
+// ── Automatic updates ───────────────────────────────────────────────────────
+// Configure which updates install automatically, and email a summary when the
+// auto-updater runs (sent through the email settings above).
+
+add_filter('auto_update_plugin', function ($update, $item) {
+    return get_option('brionic_au_plugins', '0') === '1' ? true : $update;
+}, 10, 2);
+
+add_filter('auto_update_theme', function ($update, $item) {
+    return get_option('brionic_au_themes', '0') === '1' ? true : $update;
+}, 10, 2);
+
+add_filter('allow_minor_auto_core_updates', function () {
+    return get_option('brionic_au_core_minor', '1') === '1';
+});
+
+add_filter('allow_major_auto_core_updates', function () {
+    return get_option('brionic_au_core_major', '0') === '1';
+});
+
+// Optionally silence WordPress's own core auto-update emails (Brionic sends its own).
+if (get_option('brionic_au_quiet', '0') === '1') {
+    add_filter('auto_core_update_send_email', '__return_false');
+}
+
+// Email a summary after the auto-updater runs.
+add_action('automatic_updates_complete', function ($results) {
+    if (get_option('brionic_au_notify', '1') !== '1') {
+        return;
+    }
+    $labels = ['core' => 'WordPress core', 'plugin' => 'Plugin', 'theme' => 'Theme', 'translation' => 'Translation'];
+    $lines = [];
+    foreach ($labels as $type => $label) {
+        if (empty($results[$type])) {
+            continue;
+        }
+        foreach ((array) $results[$type] as $r) {
+            $name = !empty($r->name) ? $r->name : (!empty($r->item->slug) ? $r->item->slug : '');
+            $ver = !empty($r->item->new_version) ? ' v' . $r->item->new_version : '';
+            $ok = !empty($r->result) && !is_wp_error($r->result);
+            $lines[] = ($ok ? '[OK]   ' : '[FAILED] ') . $label . ': ' . $name . $ver;
+        }
+    }
+    if (!$lines) {
+        return;
+    }
+    $site = get_bloginfo('name');
+    $to = sanitize_email((string) get_option('brionic_au_notify_email', ''));
+    if (!is_email($to)) {
+        $to = (string) get_option('admin_email');
+    }
+    wp_mail(
+        $to,
+        'Automatic updates installed on ' . $site,
+        'The automatic updater ran on ' . $site . ' (' . home_url() . "):\n\n"
+        . implode("\n", $lines) . "\n\n— Brionic Reports"
+    );
+});
+
+// ── Login page branding ─────────────────────────────────────────────────────
+// A LoginPress-style branded login screen: your logo + a full-page background.
+// Defaults ship with the Brionic Security logo and a geometric red/blue wallpaper.
+
+function brionic_login_asset_url($option, $default_file) {
+    $url = trim((string) get_option($option, ''));
+    return $url !== '' ? esc_url($url) : esc_url(plugins_url('assets/' . $default_file, __FILE__));
+}
+
+add_action('login_enqueue_scripts', function () {
+    if (get_option('brionic_login_enabled', '1') !== '1') {
+        return;
+    }
+    $logo = brionic_login_asset_url('brionic_login_logo_url', 'login-logo.png');
+    $bg   = brionic_login_asset_url('brionic_login_bg_url', 'login-bg.jpg');
+    ?>
+    <style id="brionic-login">
+      body.login { background:#0e1118 url("<?php echo $bg; ?>") center center / cover no-repeat fixed; }
+      body.login::before { content:""; position:fixed; inset:0; background:rgba(10,12,18,.30); z-index:0; }
+      #login { position:relative; z-index:1; background:rgba(255,255,255,.95); border-radius:16px; padding:24px 24px 28px; box-shadow:0 24px 70px rgba(0,0,0,.4); }
+      .login h1 a { background-image:url("<?php echo $logo; ?>"); background-size:contain; background-position:center; background-repeat:no-repeat; width:100%; height:66px; margin:0 auto 6px; }
+      .login form { margin-top:14px; background:transparent; border:0; box-shadow:none; padding:0; }
+      .login #backtoblog a, .login #nav a { color:#eef2f8; text-shadow:0 1px 3px rgba(0,0,0,.6); }
+      .login #backtoblog a:hover, .login #nav a:hover { color:#fff; }
+      .wp-core-ui .button-primary { background:#d92b32; border-color:#b81d23; box-shadow:none; text-shadow:none; }
+      .wp-core-ui .button-primary:hover { background:#b81d23; border-color:#b81d23; }
+      .login input[type=text]:focus, .login input[type=password]:focus { border-color:#d92b32; box-shadow:0 0 0 1px #d92b32; }
+    </style>
+    <?php
+});
+
+add_filter('login_headerurl', function () {
+    return home_url('/');
+});
+add_filter('login_headertext', function () {
+    return get_bloginfo('name');
+});
+
 /** Settings page under Settings → Brionic Reports Config. */
 add_action('admin_menu', function () {
     add_options_page(
@@ -191,6 +288,26 @@ function brionic_analytics_settings_page() {
         echo '<div class="notice ' . ($r['ok'] ? 'notice-success' : 'notice-error') . ' is-dismissible"><p>' . esc_html($r['msg']) . '</p></div>';
     }
 
+    // Automatic-update settings save.
+    if (isset($_POST['brionic_au_save']) && check_admin_referer('brionic_au_save')) {
+        update_option('brionic_au_core_minor', isset($_POST['brionic_au_core_minor']) ? '1' : '0');
+        update_option('brionic_au_core_major', isset($_POST['brionic_au_core_major']) ? '1' : '0');
+        update_option('brionic_au_plugins',    isset($_POST['brionic_au_plugins']) ? '1' : '0');
+        update_option('brionic_au_themes',     isset($_POST['brionic_au_themes']) ? '1' : '0');
+        update_option('brionic_au_notify',     isset($_POST['brionic_au_notify']) ? '1' : '0');
+        update_option('brionic_au_quiet',      isset($_POST['brionic_au_quiet']) ? '1' : '0');
+        update_option('brionic_au_notify_email', sanitize_email(wp_unslash($_POST['brionic_au_notify_email'] ?? '')));
+        echo '<div class="notice notice-success is-dismissible"><p>Update settings saved.</p></div>';
+    }
+
+    // Login page settings save.
+    if (isset($_POST['brionic_login_save']) && check_admin_referer('brionic_login_save')) {
+        update_option('brionic_login_enabled', isset($_POST['brionic_login_enabled']) ? '1' : '0');
+        update_option('brionic_login_logo_url', esc_url_raw(wp_unslash($_POST['brionic_login_logo_url'] ?? '')));
+        update_option('brionic_login_bg_url', esc_url_raw(wp_unslash($_POST['brionic_login_bg_url'] ?? '')));
+        echo '<div class="notice notice-success is-dismissible"><p>Login page settings saved.</p></div>';
+    }
+
     $saved = trim((string) get_option('brionic_analytics_site_key', ''));
     $baked = (BRIONIC_ANALYTICS_DEFAULT_KEY !== '__SITE_KEY__');
     $key = brionic_analytics_key();
@@ -200,6 +317,16 @@ function brionic_analytics_settings_page() {
     $mReplyTo   = (string) get_option('brionic_mail_reply_to', '');
     $mForward   = (string) get_option('brionic_mail_forward_to', '');
     $adminEmail = (string) get_option('admin_email', '');
+    $auCoreMinor = get_option('brionic_au_core_minor', '1') === '1';
+    $auCoreMajor = get_option('brionic_au_core_major', '0') === '1';
+    $auPlugins   = get_option('brionic_au_plugins', '0') === '1';
+    $auThemes    = get_option('brionic_au_themes', '0') === '1';
+    $auNotify    = get_option('brionic_au_notify', '1') === '1';
+    $auQuiet     = get_option('brionic_au_quiet', '0') === '1';
+    $auEmail     = (string) get_option('brionic_au_notify_email', '');
+    $loginOn     = get_option('brionic_login_enabled', '1') === '1';
+    $loginLogo   = (string) get_option('brionic_login_logo_url', '');
+    $loginBg     = (string) get_option('brionic_login_bg_url', '');
     ?>
     <div class="wrap">
         <h1>Brionic Reports Config</h1>
@@ -287,6 +414,57 @@ function brionic_analytics_settings_page() {
             <input type="email" class="regular-text" name="brionic_mail_test_to" value="<?php echo esc_attr($adminEmail); ?>">
             <button type="submit" class="button button-secondary">Send test email</button>
             <p class="description">Save your settings first, then send a test to confirm From/Reply-To and forwarding work.</p>
+        </form>
+
+        <hr>
+        <h2>Automatic updates</h2>
+        <p>Choose what installs automatically and get an email summary when the updater runs.</p>
+        <form action="" method="post">
+            <?php wp_nonce_field('brionic_au_save'); ?>
+            <input type="hidden" name="brionic_au_save" value="1">
+            <table class="form-table" role="presentation">
+                <tr><th scope="row">What to auto-update</th><td>
+                    <label><input type="checkbox" name="brionic_au_core_minor" <?php checked($auCoreMinor); ?>> WordPress core &mdash; minor &amp; security releases <span class="description">(recommended)</span></label><br>
+                    <label><input type="checkbox" name="brionic_au_core_major" <?php checked($auCoreMajor); ?>> WordPress core &mdash; major releases</label><br>
+                    <label><input type="checkbox" name="brionic_au_plugins" <?php checked($auPlugins); ?>> All plugins</label><br>
+                    <label><input type="checkbox" name="brionic_au_themes" <?php checked($auThemes); ?>> All themes</label>
+                </td></tr>
+                <tr><th scope="row">Notifications</th><td>
+                    <label><input type="checkbox" name="brionic_au_notify" <?php checked($auNotify); ?>> Email me a summary after automatic updates run</label><br>
+                    <label><input type="checkbox" name="brionic_au_quiet" <?php checked($auQuiet); ?>> Silence WordPress&rsquo;s own core-update emails (use Brionic&rsquo;s instead)</label>
+                </td></tr>
+                <tr><th scope="row"><label for="brionic_au_notify_email">Notify address</label></th><td>
+                    <input type="email" class="regular-text" id="brionic_au_notify_email" name="brionic_au_notify_email" value="<?php echo esc_attr($auEmail); ?>" placeholder="<?php echo esc_attr($adminEmail); ?>">
+                    <p class="description">Where update summaries go (sent using the email settings above). Uses the admin email if blank.</p>
+                </td></tr>
+            </table>
+            <?php submit_button('Save update settings'); ?>
+        </form>
+
+        <hr>
+        <h2>Login page</h2>
+        <p>Give your WordPress login screen the Brionic look &mdash; your logo over a full-page background. Defaults to the Brionic Security logo and a geometric red/blue wallpaper, and works with a custom login URL (e.g. /door).</p>
+        <form action="" method="post">
+            <?php wp_nonce_field('brionic_login_save'); ?>
+            <input type="hidden" name="brionic_login_save" value="1">
+            <table class="form-table" role="presentation">
+                <tr><th scope="row">Enable</th><td>
+                    <label><input type="checkbox" name="brionic_login_enabled" <?php checked($loginOn); ?>> Brand the login page</label>
+                </td></tr>
+                <tr><th scope="row"><label for="brionic_login_logo_url">Logo URL</label></th><td>
+                    <input type="url" class="regular-text" id="brionic_login_logo_url" name="brionic_login_logo_url" value="<?php echo esc_attr($loginLogo); ?>" placeholder="Default: built-in Brionic logo">
+                    <p class="description">Leave blank to use the built-in Brionic Security logo, or paste a Media Library image URL.</p>
+                </td></tr>
+                <tr><th scope="row"><label for="brionic_login_bg_url">Background URL</label></th><td>
+                    <input type="url" class="regular-text" id="brionic_login_bg_url" name="brionic_login_bg_url" value="<?php echo esc_attr($loginBg); ?>" placeholder="Default: built-in geometric wallpaper">
+                    <p class="description">Leave blank to use the built-in wallpaper, or paste a Media Library image URL.</p>
+                </td></tr>
+                <tr><th scope="row">Preview</th><td>
+                    <a href="<?php echo esc_url(wp_login_url()); ?>" target="_blank" class="button button-secondary">Open login page</a>
+                    <span class="description" style="margin-left:8px">Opens your login screen in a new tab.</span>
+                </td></tr>
+            </table>
+            <?php submit_button('Save login settings'); ?>
         </form>
     </div>
     <?php
