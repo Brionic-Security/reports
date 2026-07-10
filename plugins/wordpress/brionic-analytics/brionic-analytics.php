@@ -3,7 +3,7 @@
  * Plugin Name:       Brionic Reports
  * Plugin URI:        https://reports.brionicsecurity.com
  * Description:       Brionic Reports analytics, email controls, automatic-update management with notifications, and a branded login page — one plugin for your Brionic-managed WordPress site.
- * Version:           1.2.2
+ * Version:           1.2.3
  * Author:            Brionic Security
  * Author URI:        https://brionicsecurity.com
  * License:           MIT
@@ -223,11 +223,17 @@ add_action('login_enqueue_scripts', function () {
     <style id="brionic-login">
       body.login { background:#0e1118 url("<?php echo $bg; ?>") center center / cover no-repeat fixed; }
       body.login::before { content:""; position:fixed; inset:0; background:rgba(10,12,18,.30); z-index:0; }
-      #login { position:relative; z-index:1; background:rgba(255,255,255,.95); border-radius:16px; padding:24px 24px 28px; box-shadow:0 24px 70px rgba(0,0,0,.4); }
-      .login h1 a { background-image:url("<?php echo $logo; ?>"); background-size:contain; background-position:center; background-repeat:no-repeat; width:100%; height:66px; margin:0 auto 6px; }
-      .login form { margin-top:14px; background:transparent; border:0; box-shadow:none; padding:0; }
-      .login #backtoblog a, .login #nav a { color:#eef2f8; text-shadow:0 1px 3px rgba(0,0,0,.6); }
-      .login #backtoblog a:hover, .login #nav a:hover { color:#fff; }
+      #login { position:relative; z-index:1; background:rgba(255,255,255,.96); border-radius:16px; padding:26px 30px 30px; box-shadow:0 24px 70px rgba(0,0,0,.45); }
+      /* Modern WordPress uses .wp-login-logo (specificity beats a bare h1 a), so match it and force our logo. */
+      .login h1, .login h1 a, .login .wp-login-logo a {
+          background-image:url("<?php echo $logo; ?>") !important;
+          background-size:contain !important; background-position:center !important; background-repeat:no-repeat !important;
+          width:100% !important; height:74px !important; margin:0 auto 10px !important;
+      }
+      .login form { margin-top:16px; background:transparent; border:0; box-shadow:none; padding:0; }
+      .login #nav, .login #backtoblog { text-align:center; padding:14px 24px 0; margin:0 auto; }
+      .login #backtoblog a, .login #nav a { color:#eef2f8 !important; text-shadow:0 1px 3px rgba(0,0,0,.7); }
+      .login #backtoblog a:hover, .login #nav a:hover { color:#fff !important; }
       .wp-core-ui .button-primary { background:#d92b32; border-color:#b81d23; box-shadow:none; text-shadow:none; }
       .wp-core-ui .button-primary:hover { background:#b81d23; border-color:#b81d23; }
       .login input[type=text]:focus, .login input[type=password]:focus { border-color:#d92b32; box-shadow:0 0 0 1px #d92b32; }
@@ -240,6 +246,69 @@ add_filter('login_headerurl', function () {
 });
 add_filter('login_headertext', function () {
     return get_bloginfo('name');
+});
+
+// ── "Under construction" / coming-soon mode ─────────────────────────────────
+// When enabled, visitors see a branded holding page (HTTP 503) while you build.
+// Logged-in users who can edit the site still browse it normally so you can work.
+add_action('template_redirect', function () {
+    $preview = isset($_GET['brionic_uc_preview']) && current_user_can('manage_options');
+    if (!$preview) {
+        if (get_option('brionic_uc_enabled', '0') !== '1') {
+            return;
+        }
+        if (is_user_logged_in() && current_user_can('edit_posts')) {
+            return; // let editors/admins see the real site
+        }
+        if (is_admin()
+            || (defined('DOING_AJAX') && DOING_AJAX)
+            || (defined('DOING_CRON') && DOING_CRON)
+            || (defined('REST_REQUEST') && REST_REQUEST)) {
+            return;
+        }
+        if ((isset($GLOBALS['pagenow']) ? $GLOBALS['pagenow'] : '') === 'wp-login.php') {
+            return; // never block the login screen
+        }
+    }
+
+    $logo    = brionic_login_asset_url('brionic_uc_logo_url', 'login-logo.png');
+    $bg      = brionic_login_asset_url('brionic_uc_bg_url', 'login-bg.jpg');
+    $heading = trim((string) get_option('brionic_uc_heading', ''));
+    if ($heading === '') { $heading = 'Website Under Construction'; }
+    $message = trim((string) get_option('brionic_uc_message', ''));
+    if ($message === '') { $message = 'We are making improvements and will be back shortly.'; }
+    $site    = get_bloginfo('name');
+
+    nocache_headers();
+    header('Content-Type: text/html; charset=utf-8');
+    header('Retry-After: 3600');
+    status_header(503);
+    ?><!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title><?php echo esc_html($heading . ' - ' . $site); ?></title>
+<style>
+  *{box-sizing:border-box} html,body{height:100%;margin:0}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:#eef2f8;
+    background:#0e1118 url("<?php echo esc_url($bg); ?>") center center / cover no-repeat fixed;}
+  .overlay{position:fixed;inset:0;background:linear-gradient(180deg,rgba(10,12,18,.55),rgba(10,12,18,.80));}
+  .wrap{position:relative;min-height:100%;display:flex;align-items:center;justify-content:center;padding:32px;text-align:center;}
+  .card{max-width:560px;width:100%;background:rgba(16,18,26,.55);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);
+    border:1px solid rgba(255,255,255,.12);border-radius:20px;padding:44px 36px;box-shadow:0 24px 70px rgba(0,0,0,.5);}
+  .logo{width:230px;max-width:72%;height:auto;margin:0 auto 22px;display:block;}
+  h1{font-size:1.9rem;line-height:1.25;margin:0 0 12px;font-weight:700;}
+  p{font-size:1.05rem;line-height:1.6;color:#cdd6e4;margin:0;}
+  .dot{display:inline-block;width:9px;height:9px;border-radius:50%;background:#d92b32;margin-right:9px;vertical-align:middle;}
+  .foot{margin-top:28px;font-size:.78rem;color:#8b93a4;letter-spacing:.06em;text-transform:uppercase;}
+</style></head>
+<body><div class="overlay"></div><div class="wrap"><div class="card">
+  <img class="logo" src="<?php echo esc_url($logo); ?>" alt="<?php echo esc_attr($site); ?>">
+  <h1><span class="dot"></span><?php echo esc_html($heading); ?></h1>
+  <p><?php echo esc_html($message); ?></p>
+  <div class="foot"><?php echo esc_html($site); ?></div>
+</div></div></body></html>
+    <?php
+    exit;
 });
 
 /** Settings page under Settings → Brionic Reports Config. */
@@ -369,6 +438,16 @@ function brionic_analytics_settings_page() {
         echo '<div class="notice notice-success is-dismissible"><p>' . esc_html($msg) . '</p></div>';
     }
 
+    // Under-construction settings save.
+    if (isset($_POST['brionic_uc_save']) && check_admin_referer('brionic_uc_save')) {
+        update_option('brionic_uc_enabled', isset($_POST['brionic_uc_enabled']) ? '1' : '0');
+        update_option('brionic_uc_heading', sanitize_text_field(wp_unslash($_POST['brionic_uc_heading'] ?? '')));
+        update_option('brionic_uc_message', sanitize_textarea_field(wp_unslash($_POST['brionic_uc_message'] ?? '')));
+        update_option('brionic_uc_logo_url', esc_url_raw(wp_unslash($_POST['brionic_uc_logo_url'] ?? '')));
+        update_option('brionic_uc_bg_url', esc_url_raw(wp_unslash($_POST['brionic_uc_bg_url'] ?? '')));
+        echo '<div class="notice notice-success is-dismissible"><p>Under-construction settings saved.</p></div>';
+    }
+
     $saved = trim((string) get_option('brionic_analytics_site_key', ''));
     $baked = (strncmp(BRIONIC_ANALYTICS_DEFAULT_KEY, 'site_', 5) === 0);
     $key = brionic_analytics_key();
@@ -388,9 +467,32 @@ function brionic_analytics_settings_page() {
     $loginOn     = get_option('brionic_login_enabled', '1') === '1';
     $loginLogo   = (string) get_option('brionic_login_logo_url', '');
     $loginBg     = (string) get_option('brionic_login_bg_url', '');
+    $ucOn        = get_option('brionic_uc_enabled', '0') === '1';
+    $ucHeading   = (string) get_option('brionic_uc_heading', '');
+    $ucMessage   = (string) get_option('brionic_uc_message', '');
+    $ucLogo      = (string) get_option('brionic_uc_logo_url', '');
+    $ucBg        = (string) get_option('brionic_uc_bg_url', '');
+
+    $tabs = [
+        'analytics'    => 'Analytics',
+        'email'        => 'Email',
+        'updates'      => 'Automatic updates',
+        'login'        => 'Login page',
+        'construction' => 'Under construction',
+        'maintenance'  => 'Maintenance',
+    ];
+    $tab = (isset($_GET['tab']) && isset($tabs[$_GET['tab']])) ? sanitize_key($_GET['tab']) : 'analytics';
+    $tabBase = admin_url('options-general.php?page=brionic-analytics');
     ?>
     <div class="wrap">
         <h1>Brionic Reports Config</h1>
+        <h2 class="nav-tab-wrapper">
+            <?php foreach ($tabs as $tk => $tlabel): ?>
+                <a href="<?php echo esc_url($tabBase . '&tab=' . $tk); ?>" class="nav-tab <?php echo $tab === $tk ? 'nav-tab-active' : ''; ?>"><?php echo esc_html($tlabel); ?></a>
+            <?php endforeach; ?>
+        </h2>
+
+        <?php if ($tab === 'analytics'): ?>
         <h2>Website analytics</h2>
         <p>Privacy-first analytics. Once a site key is set, a lightweight tracker is added to every page&mdash;no cookies, no personal data.</p>
         <?php if ($baked): ?>
@@ -437,7 +539,7 @@ function brionic_analytics_settings_page() {
             <span class="description" style="margin-left:8px">Checks that your server can reach Brionic Reports and that the site key is valid.</span>
         </form>
 
-        <hr>
+        <?php elseif ($tab === 'email'): ?>
         <h2>Email settings</h2>
         <p>Customise the address WordPress sends email from, set a reply-to address, and optionally forward a blind copy (BCC) of every outgoing email. Each field is optional &mdash; leave it blank to keep the WordPress default.</p>
         <form action="" method="post">
@@ -477,7 +579,7 @@ function brionic_analytics_settings_page() {
             <p class="description">Save your settings first, then send a test to confirm From/Reply-To and forwarding work.</p>
         </form>
 
-        <hr>
+        <?php elseif ($tab === 'updates'): ?>
         <h2>Automatic updates</h2>
         <p>Choose what installs automatically and get an email summary when the updater runs.</p>
         <form action="" method="post">
@@ -502,7 +604,7 @@ function brionic_analytics_settings_page() {
             <?php submit_button('Save update settings'); ?>
         </form>
 
-        <hr>
+        <?php elseif ($tab === 'login'): ?>
         <h2>Login page</h2>
         <p>Give your WordPress login screen the Brionic look &mdash; your logo over a full-page background. Defaults to the Brionic Security logo and a geometric red/blue wallpaper, and works with a custom login URL (e.g. /door).</p>
         <form action="" method="post">
@@ -528,7 +630,45 @@ function brionic_analytics_settings_page() {
             <?php submit_button('Save login settings'); ?>
         </form>
 
-        <hr>
+        <?php elseif ($tab === 'construction'): ?>
+        <h2>Under construction</h2>
+        <p>Show visitors a branded &ldquo;Website Under Construction&rdquo; holding page with your Brionic logo while you build or make changes. You and any logged-in editor still see the real site, so you can keep working. Search engines are told the page is temporary (HTTP&nbsp;503).</p>
+        <?php if ($ucOn): ?>
+            <div class="notice notice-warning inline"><p><strong>Under-construction mode is ON.</strong> Logged-out visitors see the holding page. Turn it off below when you&rsquo;re ready to go live.</p></div>
+        <?php endif; ?>
+        <form action="" method="post">
+            <?php wp_nonce_field('brionic_uc_save'); ?>
+            <input type="hidden" name="brionic_uc_save" value="1">
+            <table class="form-table" role="presentation">
+                <tr><th scope="row">Enable</th><td>
+                    <label><input type="checkbox" name="brionic_uc_enabled" <?php checked($ucOn); ?>> Show the &ldquo;Under construction&rdquo; page to visitors</label>
+                    <p class="description">You&rsquo;ll still see the normal site while logged in.</p>
+                </td></tr>
+                <tr><th scope="row"><label for="brionic_uc_heading">Heading</label></th><td>
+                    <input type="text" class="regular-text" id="brionic_uc_heading" name="brionic_uc_heading" value="<?php echo esc_attr($ucHeading); ?>" placeholder="Website Under Construction">
+                    <p class="description">Leave blank to use &ldquo;Website Under Construction&rdquo;.</p>
+                </td></tr>
+                <tr><th scope="row"><label for="brionic_uc_message">Message</label></th><td>
+                    <textarea class="large-text" rows="2" id="brionic_uc_message" name="brionic_uc_message" placeholder="We are making improvements and will be back shortly."><?php echo esc_textarea($ucMessage); ?></textarea>
+                    <p class="description">A short line shown under the heading.</p>
+                </td></tr>
+                <tr><th scope="row"><label for="brionic_uc_logo_url">Logo URL</label></th><td>
+                    <input type="url" class="regular-text" id="brionic_uc_logo_url" name="brionic_uc_logo_url" value="<?php echo esc_attr($ucLogo); ?>" placeholder="Default: built-in Brionic logo">
+                    <p class="description">Leave blank to use the built-in Brionic Security logo, or paste a Media Library image URL.</p>
+                </td></tr>
+                <tr><th scope="row"><label for="brionic_uc_bg_url">Background URL</label></th><td>
+                    <input type="url" class="regular-text" id="brionic_uc_bg_url" name="brionic_uc_bg_url" value="<?php echo esc_attr($ucBg); ?>" placeholder="Default: built-in geometric wallpaper">
+                    <p class="description">Leave blank to use the built-in wallpaper, or paste a Media Library image URL.</p>
+                </td></tr>
+                <tr><th scope="row">Preview</th><td>
+                    <a href="<?php echo esc_url(home_url('/?brionic_uc_preview=1')); ?>" target="_blank" class="button button-secondary">Open a preview</a>
+                    <span class="description" style="margin-left:8px">Opens the holding page in a new tab (visible to you even when the mode is off).</span>
+                </td></tr>
+            </table>
+            <?php submit_button('Save under-construction settings'); ?>
+        </form>
+
+        <?php elseif ($tab === 'maintenance'): ?>
         <h2>Maintenance</h2>
         <p>Clear cached pages and compiled PHP if the site is serving stale content or a plugin/theme change isn&rsquo;t showing up. Safe to run anytime &mdash; caches simply rebuild on the next visit.</p>
         <form action="" method="post">
@@ -537,6 +677,7 @@ function brionic_analytics_settings_page() {
             <button type="submit" class="button button-secondary">Flush all caches</button>
             <span class="description" style="margin-left:8px">Clears the WordPress object cache, PHP OPcache, and any caching plugin found (SiteGround, WP Rocket, LiteSpeed, W3&nbsp;Total&nbsp;Cache).</span>
         </form>
+        <?php endif; ?>
     </div>
     <?php
 }
