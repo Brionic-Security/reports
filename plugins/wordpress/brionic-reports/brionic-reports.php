@@ -46,7 +46,7 @@ add_action('wp_head', function () {
         return;
     }
     printf(
-        '<script defer data-site="%s" src="%s"></script>' . "\n",
+        '<script defer data-site="%s" data-via="wordpress" src="%s"></script>' . "\n",
         esc_attr($key),
         esc_url(BRIONIC_REPORTS_SRC)
     );

@@ -32,7 +32,8 @@ final class CollectController
                     $request->ip(),
                     ((string) ($payload['t'] ?? 'pageview')) === 'event' ? 'event' : 'pageview',
                     isset($payload['n']) ? (string) $payload['n'] : null,
-                    isset($payload['w']) ? (string) $payload['w'] : null
+                    isset($payload['w']) ? (string) $payload['w'] : null,
+                    isset($payload['via']) ? (string) $payload['via'] : null
                 );
             } catch (\Throwable $e) {
                 logger('collect failed: ' . $e->getMessage());

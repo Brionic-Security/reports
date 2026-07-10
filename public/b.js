@@ -15,11 +15,15 @@
   var site = script.getAttribute('data-site');
   if (!site) return;
 
+  // How the tracker was installed (e.g. the WordPress plugin sets "wordpress").
+  var via = script.getAttribute('data-via') || '';
+
   // Endpoint = same origin the script was served from.
   var endpoint = new URL(script.src).origin + '/collect';
 
   function send(payload) {
     payload.s = site;
+    if (via) payload.via = via;
     var body = JSON.stringify(payload);
     try {
       if (navigator.sendBeacon) {

@@ -18,16 +18,34 @@ $this->layout('layout', ['title' => $site['name'] . ' settings · Brionic Report
 <div class="grid">
   <div class="card">
     <h2>Connect this website</h2>
-    <p class="muted" style="margin-top:0">Pick whichever is easiest — tracking is plug-and-play, privacy-first, and never uses cookies.</p>
+    <?php $conn = $connection ?? ['any' => false, 'wordpress' => 0, 'snippet' => 0, 'last' => null]; ?>
+    <?php if ($conn['any']): ?>
+      <div class="conn-status ok">
+        <span class="up-led"></span>
+        <span><strong>Connected</strong> &mdash; receiving data<?= $conn['last'] ? ', last hit ' . e(time_ago($conn['last'])) : '' ?>.
+        <?php
+          $via = [];
+          if ($conn['wordpress'] > 0) { $via[] = 'WordPress plugin'; }
+          if ($conn['snippet'] > 0) { $via[] = 'code snippet'; }
+        ?>
+        Detected via <strong><?= e(implode(' + ', $via)) ?></strong>.</span>
+      </div>
+    <?php else: ?>
+      <div class="conn-status wait">
+        <span class="up-led"></span>
+        <span>Not connected yet &mdash; add one of the methods below, then reload your site. Data appears here within a minute.</span>
+      </div>
+    <?php endif; ?>
+    <p class="muted">Pick whichever is easiest — tracking is plug-and-play, privacy-first, and never uses cookies.</p>
 
-    <div class="connect-method">
-      <h3><span class="cm-num">1</span> WordPress <span class="cm-tag">easiest</span></h3>
+    <div class="connect-method <?= $conn['wordpress'] > 0 ? 'is-connected' : '' ?>">
+      <h3><span class="cm-num">1</span> WordPress <?php if ($conn['wordpress'] > 0): ?><span class="cm-badge">&#10003; Connected</span><?php else: ?><span class="cm-tag">easiest</span><?php endif; ?></h3>
       <p class="muted">Your site key is baked into the download. In WordPress go to <strong>Plugins &rarr; Add New &rarr; Upload Plugin</strong>, upload the file, then click <strong>Activate</strong>.</p>
       <a class="btn btn-primary btn-sm" href="<?= app_url('sites/' . $site['id'] . '/plugin.zip') ?>">&#8681; Download WordPress plugin</a>
     </div>
 
-    <div class="connect-method">
-      <h3><span class="cm-num">2</span> Any website (HTML)</h3>
+    <div class="connect-method <?= $conn['snippet'] > 0 ? 'is-connected' : '' ?>">
+      <h3><span class="cm-num">2</span> Any website (HTML) <?php if ($conn['snippet'] > 0): ?><span class="cm-badge">&#10003; Connected</span><?php endif; ?></h3>
       <p class="muted">Paste this once, just before the closing <code>&lt;/head&gt;</code> tag, on every page you want to track.</p>
       <code class="code"><?= e($snippet) ?></code>
     </div>

@@ -40,12 +40,45 @@ final class SiteController
             throw HttpException::notFound('Site not found.');
         }
         return Response::html(view('sites/show', [
-            'site'    => $site,
-            'snippet' => self::snippet((string) $site['public_id']),
-            'ok'      => Session::getFlash('ok'),
-            'error'   => Session::getFlash('error'),
-            'runs'    => \App\Models\ReportRun::recentForSite((int) $site['id'], 6),
+            'site'       => $site,
+            'snippet'    => self::snippet((string) $site['public_id']),
+            'ok'         => Session::getFlash('ok'),
+            'error'      => Session::getFlash('error'),
+            'runs'       => \App\Models\ReportRun::recentForSite((int) $site['id'], 6),
+            'connection' => self::connectionStatus((int) $site['id']),
         ]));
+    }
+
+    /**
+     * Detect whether (and how) the site is currently sending data, based on the
+     * install-method marker on recent events (last 30 days).
+     *
+     * @return array{any:bool,wordpress:int,snippet:int,last:?string}
+     */
+    private static function connectionStatus(int $siteId): array
+    {
+        $since = gmdate('Y-m-d H:i:s', time() - 30 * 86400);
+        $rows = \App\Support\Database::select(
+            "SELECT COALESCE(NULLIF(via, ''), 'html') via, COUNT(*) n, MAX(created_at) last
+             FROM events WHERE site_id = ? AND created_at >= ?
+             GROUP BY COALESCE(NULLIF(via, ''), 'html')",
+            [$siteId, $since]
+        );
+        $wp = 0;
+        $snippet = 0;
+        $last = null;
+        foreach ($rows as $r) {
+            $n = (int) $r['n'];
+            if ((string) $r['via'] === 'wordpress') {
+                $wp += $n;
+            } else {
+                $snippet += $n;
+            }
+            if ($last === null || (string) $r['last'] > $last) {
+                $last = (string) $r['last'];
+            }
+        }
+        return ['any' => ($wp + $snippet) > 0, 'wordpress' => $wp, 'snippet' => $snippet, 'last' => $last];
     }
 
     public function update(Request $request, array $params): Response

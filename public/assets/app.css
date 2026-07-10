@@ -209,5 +209,13 @@ h2 { font-size: 1.15rem; margin: 0 0 14px; letter-spacing: -0.01em; }
 .connect-method .code { margin-top: 6px; }
 .cm-num { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 50%; background: var(--accent); color: #fff; font-size: .78rem; font-weight: 800; flex: none; }
 .cm-tag { font-size: .68rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--green); background: rgba(18,153,107,.12); border-radius: 999px; padding: 2px 8px; }
+.cm-badge { font-size: .68rem; font-weight: 800; letter-spacing: .02em; color: #fff; background: var(--green); border-radius: 999px; padding: 2px 9px; }
+.connect-method.is-connected { border-color: rgba(18,153,107,.4); background: rgba(18,153,107,.05); }
+.conn-status { display: flex; align-items: center; gap: 10px; padding: 11px 14px; border-radius: 12px; font-size: .9rem; margin: 0 0 14px; border: 1px solid var(--line); }
+.conn-status.ok { background: rgba(18,153,107,.10); border-color: rgba(18,153,107,.3); color: #0e7a55; }
+.conn-status.ok .up-led { background: var(--green); box-shadow: 0 0 6px rgba(18,153,107,.6); }
+.conn-status.wait { background: rgba(201,162,60,.10); border-color: rgba(201,162,60,.3); color: #8a6d17; }
+.conn-status.wait .up-led { background: var(--amber); }
+.conn-status strong { color: inherit; }
 code { background: var(--panel-2); border-radius: 5px; padding: 1px 5px; font: .86em var(--font-mono); }
 .code code { background: none; padding: 0; }

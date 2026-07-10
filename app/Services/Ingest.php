@@ -25,7 +25,8 @@ final class Ingest
         string $ip,
         string $type = 'pageview',
         ?string $name = null,
-        ?string $screen = null
+        ?string $screen = null,
+        ?string $via = null
     ): bool {
         $site = Site::findByPublicId($siteKey);
         if ($site === null) {
@@ -39,8 +40,8 @@ final class Ingest
         Database::insert(
             'INSERT INTO events
                 (site_id, type, name, path, referer_host, is_bot, bot_name,
-                 browser, os, device, country, city, country_code, lat, lon, visitor_hash, created_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                 browser, os, device, country, city, country_code, lat, lon, visitor_hash, via, created_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
             [
                 (int) $site['id'],
                 $type === 'event' ? 'event' : 'pageview',
@@ -58,10 +59,22 @@ final class Ingest
                 $geo['lat'] ?? null,
                 $geo['lon'] ?? null,
                 self::visitorHash((int) $site['id'], $ip, $userAgent),
+                self::cleanVia($via),
                 now(),
             ]
         );
         return true;
+    }
+
+    /** Normalise the install-method marker to a short known token. */
+    private static function cleanVia(?string $via): string
+    {
+        $via = strtolower(trim((string) $via));
+        $allowed = ['wordpress', 'html', 'gtm', 'shopify', 'wix', 'squarespace'];
+        if ($via === '' || !in_array($via, $allowed, true)) {
+            return 'html';
+        }
+        return $via;
     }
 
     private static function visitorHash(int $siteId, string $ip, string $ua): string
