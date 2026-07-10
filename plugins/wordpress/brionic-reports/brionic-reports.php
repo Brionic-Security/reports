@@ -45,12 +45,15 @@ add_action('wp_head', function () {
     if ($key === '' || $key === '__SITE_KEY__' || is_admin()) {
         return;
     }
+    // A comment marker is emitted even if an optimiser later strips the <script>,
+    // so the connection validator can tell "active but stripped" from "inactive".
+    printf("\n<!-- Brionic Reports active: %s -->\n", esc_html($key));
     printf(
         '<script defer data-site="%s" data-via="wordpress" src="%s"></script>' . "\n",
         esc_attr($key),
         esc_url(BRIONIC_REPORTS_SRC)
     );
-}, 20);
+}, 1);
 
 /** Settings page under Settings → Brionic Reports. */
 add_action('admin_menu', function () {

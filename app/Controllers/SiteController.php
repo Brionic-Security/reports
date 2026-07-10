@@ -80,19 +80,23 @@ final class SiteController
         }
 
         $key = (string) $site['public_id'];
-        $hasTracker = stripos($html, $key) !== false
-            && (stripos($html, '/b.js') !== false || stripos($html, 'brionic') !== false);
+        $hasScript = stripos($html, $key) !== false && stripos($html, '/b.js') !== false;
+        $hasMarker = stripos($html, 'Brionic Reports active') !== false;
 
-        if ($hasTracker) {
+        if ($hasScript) {
             $via = '';
             if (preg_match('/data-via=["\']([a-z]+)["\']/i', $html, $m)) {
                 $via = ' (' . strtolower($m[1]) . ')';
             }
             Session::flash('ok', 'The Brionic tracker' . $via . ' is installed on your homepage, but no visits have been recorded yet. '
-                . 'Open your site in a normal browser window (not logged in), then click Validate again in a minute.');
+                . 'Open your site in a normal (logged-out) browser window, then click Validate again in a minute.');
+        } elseif ($hasMarker) {
+            Session::flash('error', 'The Brionic Reports plugin is active, but the tracking script is being removed from the page — usually by a caching or JavaScript-optimisation plugin. '
+                . 'Clear your site cache and exclude "b.js" from JS optimisation/deferral, then try again.');
         } else {
-            Session::flash('error', 'The Brionic tracker was not found on ' . $url . '. '
-                . 'Make sure the plugin is Active (or the snippet is in your <head>) and that a caching/optimisation plugin is not stripping it, then try again.');
+            Session::flash('error', 'The Brionic tracker was not found on ' . $url . '. Two common causes: '
+                . '(1) a page cache is serving an old copy — purge your site/CDN cache; or '
+                . '(2) the plugin is not Active, or the site key was not saved (open Settings → Brionic Reports in WordPress and confirm it says "Active"). Then try again.');
         }
         return Response::redirect(app_url('sites/' . $id . '/settings'));
     }
