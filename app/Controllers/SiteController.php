@@ -50,6 +50,88 @@ final class SiteController
     }
 
     /**
+     * Actively check the connection: first any received data, then fetch the
+     * live homepage and look for the tracker snippet. Gives actionable feedback.
+     */
+    public function validate(Request $request, array $params): Response
+    {
+        $site = Site::find((int) ($params['id'] ?? 0));
+        if ($site === null) {
+            throw HttpException::notFound('Site not found.');
+        }
+        $id = (int) $site['id'];
+
+        // 1) Have we already received data?
+        $status = self::connectionStatus($id);
+        if ($status['any']) {
+            $methods = [];
+            if ($status['wordpress'] > 0) { $methods[] = 'WordPress plugin'; }
+            if ($status['snippet'] > 0) { $methods[] = 'code snippet'; }
+            Session::flash('ok', 'Connected! Receiving data via ' . implode(' + ', $methods) . '.');
+            return Response::redirect(app_url('sites/' . $id . '/settings'));
+        }
+
+        // 2) No data yet — fetch the homepage and look for the tracker.
+        $url = 'https://' . Site::normalizeDomain((string) $site['domain']);
+        [$ok, $html, $err] = self::fetchHtml($url);
+        if (!$ok) {
+            Session::flash('error', 'Could not reach ' . $url . ' to check (' . $err . '). Verify the domain and try again.');
+            return Response::redirect(app_url('sites/' . $id . '/settings'));
+        }
+
+        $key = (string) $site['public_id'];
+        $hasTracker = stripos($html, $key) !== false
+            && (stripos($html, '/b.js') !== false || stripos($html, 'brionic') !== false);
+
+        if ($hasTracker) {
+            $via = '';
+            if (preg_match('/data-via=["\']([a-z]+)["\']/i', $html, $m)) {
+                $via = ' (' . strtolower($m[1]) . ')';
+            }
+            Session::flash('ok', 'The Brionic tracker' . $via . ' is installed on your homepage, but no visits have been recorded yet. '
+                . 'Open your site in a normal browser window (not logged in), then click Validate again in a minute.');
+        } else {
+            Session::flash('error', 'The Brionic tracker was not found on ' . $url . '. '
+                . 'Make sure the plugin is Active (or the snippet is in your <head>) and that a caching/optimisation plugin is not stripping it, then try again.');
+        }
+        return Response::redirect(app_url('sites/' . $id . '/settings'));
+    }
+
+    /**
+     * Fetch a URL's HTML (first ~512KB) for connection validation.
+     *
+     * @return array{0:bool,1:string,2:string} [ok, html, error]
+     */
+    private static function fetchHtml(string $url): array
+    {
+        if (!function_exists('curl_init')) {
+            return [false, '', 'curl unavailable'];
+        }
+        $ch = curl_init($url);
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_FOLLOWLOCATION => true,
+            CURLOPT_MAXREDIRS      => 5,
+            CURLOPT_TIMEOUT        => 12,
+            CURLOPT_CONNECTTIMEOUT => 10,
+            CURLOPT_USERAGENT      => 'BrionicReportsValidator/1.0 (+https://reports.brionicsecurity.com)',
+            CURLOPT_SSL_VERIFYPEER => true,
+            CURLOPT_SSL_VERIFYHOST => 2,
+            CURLOPT_RANGE          => '0-524287',
+        ]);
+        $body = curl_exec($ch);
+        $err = curl_error($ch);
+        $code = (int) curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
+        if ($body === false || $body === null) {
+            return [false, '', $err !== '' ? $err : 'no response'];
+        }
+        if ($code >= 400) {
+            return [false, '', 'HTTP ' . $code];
+        }
+        return [true, (string) $body, ''];
+    }
+
+    /**
      * Detect whether (and how) the site is currently sending data, based on the
      * install-method marker on recent events (last 30 days).
      *

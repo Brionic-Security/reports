@@ -40,6 +40,7 @@ return function (Router $router): void {
         $r->get('/sites/{id}/realtime.json', [DashboardController::class, 'realtimeSite']);
         $r->get('/sites/{id}/settings', [SiteController::class, 'show']);
         $r->get('/sites/{id}/plugin.zip', [DownloadController::class, 'wordpressPlugin']);
+        $r->post('/sites/{id}/validate', [SiteController::class, 'validate'], ['csrf']);
         $r->post('/sites/{id}', [SiteController::class, 'update'], ['csrf']);
         $r->post('/sites/{id}/delete', [SiteController::class, 'destroy'], ['csrf']);
 

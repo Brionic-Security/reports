@@ -36,6 +36,11 @@ $this->layout('layout', ['title' => $site['name'] . ' settings · Brionic Report
         <span>Not connected yet &mdash; add one of the methods below, then reload your site. Data appears here within a minute.</span>
       </div>
     <?php endif; ?>
+    <form method="post" action="<?= app_url('sites/' . $site['id'] . '/validate') ?>" style="margin:0 0 14px">
+      <?= csrf_field() ?>
+      <button class="btn btn-sm" type="submit">&#8635; Validate connection</button>
+      <span class="muted" style="font-size:.8rem;margin-left:8px">Checks for data and looks for the tracker on your homepage.</span>
+    </form>
     <p class="muted">Pick whichever is easiest — tracking is plug-and-play, privacy-first, and never uses cookies.</p>
 
     <div class="connect-method <?= $conn['wordpress'] > 0 ? 'is-connected' : '' ?>">
