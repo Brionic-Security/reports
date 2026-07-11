@@ -8,6 +8,7 @@ use App\Controllers\DashboardController;
 use App\Controllers\DownloadController;
 use App\Controllers\ReportController;
 use App\Controllers\SiteController;
+use App\Controllers\TrackerController;
 use App\Support\Response;
 use App\Support\Router;
 
@@ -15,6 +16,9 @@ return function (Router $router): void {
 
     // Root → dashboard (redirects to login if not authenticated).
     $router->get('/', fn () => Response::redirect(app_url('dashboard')));
+
+    // Tracker script served via PHP for controllable caching (short + ETag).
+    $router->get('/b.js', [TrackerController::class, 'serve']);
 
     // ── Public tracking endpoint (cross-origin, no CSRF) ─────────────────────
     // The tracker sends a "simple" beacon (text/plain), so no CORS preflight is

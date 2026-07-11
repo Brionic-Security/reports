@@ -10,6 +10,13 @@
  */
 (function () {
   'use strict';
+  // Idempotency guard: a page can end up running this tracker more than once
+  // (speed-optimiser duplication, combined/inlined bundles loading alongside the
+  // external file, accidental double-include). Only the first execution wins, so
+  // page views are never multiplied.
+  if (window.__brionicRan) return;
+  window.__brionicRan = true;
+
   var script = document.currentScript;
   // Config comes from the script tag's data-* attributes, but falls back to a
   // window.__brionic global set by the host (e.g. the WordPress plugin). The
@@ -47,9 +54,18 @@
     } catch (e) {}
   }
 
+  var lastSentPath = '';
+  var lastSentAt = 0;
+
   function pageview() {
     // Ignore localhost / non-http pages.
     if (location.protocol !== 'http:' && location.protocol !== 'https:') return;
+    // Collapse rapid duplicate views of the same path (e.g. an initial view and
+    // an immediate SPA/route re-fire) so one navigation counts once.
+    var now = Date.now();
+    if (location.pathname === lastSentPath && (now - lastSentAt) < 2000) return;
+    lastSentPath = location.pathname;
+    lastSentAt = now;
     send({
       t: 'pageview',
       p: location.pathname,

@@ -53,7 +53,7 @@ final class Stats
         $totals = Database::selectOne(
             "SELECT
                 SUM(CASE WHEN type = 'pageview' THEN 1 ELSE 0 END) pageviews,
-                COUNT(DISTINCT visitor_hash) visitors,
+                COUNT(DISTINCT CASE WHEN is_bot = 0 THEN visitor_hash END) visitors,
                 SUM(CASE WHEN is_bot = 1 THEN 1 ELSE 0 END) bots,
                 COUNT(*) total
              FROM events WHERE {$base}",

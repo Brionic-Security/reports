@@ -1,7 +1,9 @@
 /* =============================================================================
    Brionic Reports — UI theme
-   Light, macOS-inspired design language adopted from the Brionic Web Framework
-   (design tokens only; this app is server-rendered PHP).
+   macOS-inspired design language from the Brionic Web Framework
+   (github.com/brian0h3c/brionic-web-framework): vibrancy, glass, soft depth,
+   vivid system color. Design tokens vendored below; this app is server-rendered
+   PHP so we consume the framework's tokens directly rather than its Astro build.
    ============================================================================= */
 :root {
   --bg: #f5f5f7;            /* app background (macOS light gray) */
@@ -17,9 +19,33 @@
   --green: #12996b;
   --amber: #9a7b1e;
   --danger: #c0341d;
+
+  /* macOS system colors (the vivid, colorful palette) — bw framework */
+  --mac-red: #ff3b30;   --mac-orange: #ff9500;  --mac-yellow: #ffcc00;
+  --mac-green: #34c759; --mac-mint: #00c7be;    --mac-teal: #30b0c7;
+  --mac-cyan: #32ade6;  --mac-blue: #007aff;    --mac-indigo: #5856d6;
+  --mac-purple: #af52de; --mac-pink: #ff2d55;
+
+  /* Vibrancy / glass + signature gradients */
+  --glass: rgba(255, 255, 255, 0.65);
+  --glass-strong: rgba(255, 255, 255, 0.82);
+  --blur: saturate(180%) blur(20px);
+  --gradient-aurora: linear-gradient(120deg, #5856d6, #007aff, #32ade6, #34c759, #ffcc00, #ff9500, #ff2d55);
+  --gradient-brand: linear-gradient(135deg, var(--accent), var(--accent-deep));
+  --gradient-mint: linear-gradient(135deg, #00c7be 0%, #34c759 100%);
+
+  /* Traffic-light window controls */
+  --tl-red: #ff5f57; --tl-yellow: #febc2e; --tl-green: #28c840;
+
+  /* Chart colors: vivid macOS green (humans) + yellow (bots) */
+  --chart-human: var(--mac-green);
+  --chart-bot: var(--mac-yellow);
+
   --radius: 16px;
+  --radius-lg: 18px;
   --shadow-sm: 0 1px 2px rgba(0,0,0,.05), 0 2px 8px rgba(0,0,0,.06);
-  --shadow-md: 0 4px 16px rgba(0,0,0,.08);
+  --shadow-md: 0 8px 24px rgba(0,0,0,.12);
+  --shadow-window: 0 30px 90px rgba(0,0,0,.14), 0 8px 24px rgba(0,0,0,.10);
   --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Helvetica Neue", "Segoe UI", Roboto, system-ui, sans-serif;
   --font-mono: "SF Mono", ui-monospace, SFMono-Regular, "JetBrains Mono", Menlo, Consolas, monospace;
 }
@@ -34,10 +60,13 @@ body {
 a { color: inherit; text-decoration: none; }
 .wrap { max-width: 1180px; margin: 0 auto; padding: 0 22px; }
 
-/* Topbar */
+/* Topbar — macOS vibrancy: sticky glass bar with backdrop blur */
 .topbar {
   display: flex; align-items: center; justify-content: space-between;
-  padding: 16px 0; border-bottom: 1px solid var(--line); margin-bottom: 26px;
+  padding: 14px 22px; border-bottom: 1px solid var(--line); margin: 0 -22px 26px;
+  position: sticky; top: 0; z-index: 100;
+  background: var(--glass-strong);
+  -webkit-backdrop-filter: var(--blur); backdrop-filter: var(--blur);
 }
 .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 1.15rem; color: var(--text); }
 .brand-logo { height: 30px; width: auto; display: block; }
@@ -106,8 +135,8 @@ h2 { font-size: 1.15rem; margin: 0 0 14px; letter-spacing: -0.01em; }
 /* Day chart */
 .chart { display: flex; align-items: flex-end; gap: 3px; height: 120px; margin-top: 8px; }
 .chart .col { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; gap: 2px; min-width: 2px; }
-.chart .col .h { background: var(--accent); border-radius: 2px 2px 0 0; }
-.chart .col .b { background: rgba(201,162,60,.55); border-radius: 2px 2px 0 0; }
+.chart .col .h { background: var(--chart-human); border-radius: 2px 2px 0 0; }
+.chart .col .b { background: var(--chart-bot); border-radius: 2px 2px 0 0; }
 
 /* Filter */
 .filter { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 20px; }
@@ -219,3 +248,23 @@ h2 { font-size: 1.15rem; margin: 0 0 14px; letter-spacing: -0.01em; }
 .conn-status strong { color: inherit; }
 code { background: var(--panel-2); border-radius: 5px; padding: 1px 5px; font: .86em var(--font-mono); }
 .code code { background: none; padding: 0; }
+
+/* ── Donut charts (inline-SVG, zero-JS) ─────────────────────────────────── */
+.metric-viz { display: flex; align-items: center; gap: 22px; flex-wrap: wrap; }
+.donut { flex: none; }
+.donut circle { fill: none; }
+.donut-legend { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; flex: 1; min-width: 150px; }
+.donut-legend li { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 9px; font-size: .88rem; }
+.donut-legend .dot { width: 10px; height: 10px; border-radius: 3px; flex: none; }
+.donut-legend .lv { color: var(--muted); font-variant-numeric: tabular-nums; }
+.donut-hole { fill: var(--panel); }
+.donut-total { font-weight: 800; font-size: .92rem; fill: var(--text); }
+.donut-sub { fill: var(--muted); font-size: .6rem; text-transform: uppercase; letter-spacing: .06em; }
+
+/* Gradient brand mark + macOS card depth */
+.brand-sub { background: none; }
+.card { transition: box-shadow .24s var(--ease-out, ease), transform .18s ease; }
+.card.lift:hover { box-shadow: var(--shadow-md); transform: translateY(-2px); }
+
+/* Chart legend pills reuse .badge.human/.bot; brighten to vivid system colors */
+.chip-legend { display: inline-flex; gap: 6px; align-items: center; }

@@ -17,6 +17,40 @@ $bars = function (array $rows, string $labelKey, string $valKey) {
     }
     echo '</ul>';
 };
+
+/** macOS system-color palette for donut slices. */
+$donutPalette = ['#34c759', '#007aff', '#ff9500', '#af52de', '#ff2d55', '#32ade6', '#ffcc00', '#00c7be', '#5856d6', '#ff3b30'];
+
+/** Render an inline-SVG donut chart (zero-JS) with a legend from [label, value] rows. */
+$donut = function (array $rows, string $labelKey, string $valKey, string $centerSub = '', ?array $colors = null) use ($donutPalette) {
+    $rows = array_values(array_filter($rows, static fn ($r) => (int) $r[$valKey] > 0));
+    $total = array_sum(array_map(static fn ($r) => (int) $r[$valKey], $rows));
+    if ($total <= 0) { echo '<p class="empty">No data yet.</p>'; return; }
+    $palette = $colors ?: $donutPalette;
+    $r = 52; $sw = 20; $cx = 70; $cy = 70; $C = 2 * M_PI * $r;
+    $off = 0; $arcs = ''; $legend = ''; $i = 0;
+    foreach ($rows as $row) {
+        $v = (int) $row[$valKey];
+        $len = $v / $total * $C;
+        $color = $palette[$i % count($palette)];
+        $arcs .= '<circle cx="' . $cx . '" cy="' . $cy . '" r="' . $r . '" stroke="' . $color
+               . '" stroke-width="' . $sw . '" stroke-dasharray="' . round($len, 2) . ' ' . round($C - $len, 2)
+               . '" stroke-dashoffset="' . round(-$off, 2) . '"></circle>';
+        $off += $len;
+        $pct = (int) round($v / $total * 100);
+        $label = (string) ($row[$labelKey] ?? ''); if ($label === '') { $label = '—'; }
+        $legend .= '<li><span class="dot" style="background:' . $color . '"></span>'
+                 . '<span>' . e($label) . '</span>'
+                 . '<span class="lv">' . num($v) . ' · ' . $pct . '%</span></li>';
+        $i++;
+    }
+    echo '<div class="metric-viz"><svg class="donut" width="140" height="140" viewBox="0 0 140 140" role="img">'
+       . '<g transform="rotate(-90 ' . $cx . ' ' . $cy . ')">' . $arcs . '</g>'
+       . '<circle class="donut-hole" cx="' . $cx . '" cy="' . $cy . '" r="' . ($r - $sw / 2 - 1) . '"></circle>'
+       . '<text class="donut-total" x="' . $cx . '" y="' . ($cy - 1) . '" text-anchor="middle" dominant-baseline="middle">' . num($total) . '</text>'
+       . ($centerSub !== '' ? '<text class="donut-sub" x="' . $cx . '" y="' . ($cy + 13) . '" text-anchor="middle" dominant-baseline="middle">' . e($centerSub) . '</text>' : '')
+       . '</svg><ul class="donut-legend">' . $legend . '</ul></div>';
+};
 $maxDay = 1;
 foreach ($stats['by_day'] as $d) { $maxDay = max($maxDay, $d['humans'] + $d['bots']); }
 
@@ -123,6 +157,24 @@ $monEnabled = (int) ($site['monitor_enabled'] ?? 1) === 1;
   <?php else: ?><p class="empty">No visits in this period yet.</p><?php endif; ?>
 </div>
 
+<?php
+$humanHits = max(0, (int) $stats['total'] - (int) $stats['bots']);
+$qualityRows = [
+    ['label' => 'Humans', 'n' => $humanHits],
+    ['label' => 'Bots', 'n' => (int) $stats['bots']],
+];
+?>
+<div class="grid grid-2" style="margin-bottom:16px">
+  <div class="card lift">
+    <h2>Traffic quality <span class="muted" style="font-size:.75rem;font-weight:400">humans vs bots</span></h2>
+    <?php $donut($qualityRows, 'label', 'n', 'events', ['#34c759', '#ffcc00']); ?>
+  </div>
+  <div class="card lift">
+    <h2>Top pages <span class="muted" style="font-size:.75rem;font-weight:400">share of views</span></h2>
+    <?php $donut(array_slice($stats['top_pages'], 0, 6), 'path', 'n', 'views'); ?>
+  </div>
+</div>
+
 <div class="card" style="margin-bottom:16px">
   <h2>Visitor map <span class="muted" style="font-size:.75rem;font-weight:400">by city</span></h2>
   <?php if (!empty($stats['map'])): $mx = max(array_map(fn ($p) => (int) $p['n'], $stats['map'])) ?: 1; ?>
@@ -141,15 +193,15 @@ $monEnabled = (int) ($site['monitor_enabled'] ?? 1) === 1;
 </div>
 
 <div class="grid grid-2">
-  <div class="card"><h2>Top pages</h2><?php $bars($stats['top_pages'], 'path', 'n'); ?></div>
-  <div class="card"><h2>Top referrers</h2><?php $bars($stats['referrers'], 'referer_host', 'n'); ?></div>
-  <div class="card"><h2>Countries</h2><?php $bars($stats['countries'], 'country', 'n'); ?></div>
-  <div class="card"><h2>Top cities</h2><?php $bars($stats['cities'], 'city', 'n'); ?></div>
-  <div class="card"><h2>Devices</h2><?php $bars($stats['devices'], 'label', 'n'); ?></div>
-  <div class="card"><h2>Browsers</h2><?php $bars($stats['browsers'], 'label', 'n'); ?></div>
-  <div class="card"><h2>Operating systems</h2><?php $bars($stats['os'], 'label', 'n'); ?></div>
-  <div class="card"><h2>Custom events</h2><?php $bars($stats['events'], 'name', 'n'); ?></div>
-  <div class="card"><h2>Bots &amp; crawlers</h2><?php $bars($stats['bot_names'], 'bot_name', 'n'); ?></div>
+  <div class="card lift"><h2>Top pages</h2><?php $bars($stats['top_pages'], 'path', 'n'); ?></div>
+  <div class="card lift"><h2>Top referrers</h2><?php $bars($stats['referrers'], 'referer_host', 'n'); ?></div>
+  <div class="card lift"><h2>Countries</h2><?php $bars($stats['countries'], 'country', 'n'); ?></div>
+  <div class="card lift"><h2>Top cities</h2><?php $bars($stats['cities'], 'city', 'n'); ?></div>
+  <div class="card lift"><h2>Devices</h2><?php $donut($stats['devices'], 'label', 'n', 'devices'); ?></div>
+  <div class="card lift"><h2>Browsers</h2><?php $donut($stats['browsers'], 'label', 'n', 'browsers'); ?></div>
+  <div class="card lift"><h2>Operating systems</h2><?php $donut($stats['os'], 'label', 'n', 'systems'); ?></div>
+  <div class="card lift"><h2>Custom events</h2><?php $bars($stats['events'], 'name', 'n'); ?></div>
+  <div class="card lift"><h2>Bots &amp; crawlers</h2><?php $bars($stats['bot_names'], 'bot_name', 'n'); ?></div>
 </div>
 
 <div class="card mt">

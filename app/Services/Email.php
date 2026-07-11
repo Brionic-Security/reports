@@ -16,6 +16,8 @@ final class Email
     private const RED = '#d92b32';
     private const GOLD = '#c9a23c';
     private const GREEN = '#2ed3a7';
+    private const MAC_GREEN = '#34c759';   /* humans (macOS system green) */
+    private const MAC_YELLOW = '#ffcc00';  /* bots (macOS system yellow) */
     private const DARK = '#15171c';
     private const INK = '#1c2129';
     private const MUTED = '#6b7280';
@@ -55,7 +57,7 @@ final class Email
         $body = $hero
             . self::metrics([
                 ['Page views', $pageviews, self::RED],
-                ['Unique visitors', $visitors, self::GOLD],
+                ['Unique visitors', $visitors, self::MAC_GREEN],
                 ['Bot hits', $bots, '#b45309'],
                 ['All-time views', $alltime, self::INK],
             ])
@@ -66,13 +68,14 @@ final class Email
                 self::listSection('Top cities', $data['cities'] ?? [], 'city', 'n', 6, true)
             )
             . self::twoCol(
-                self::segSection('Devices', $data['devices'] ?? []),
-                self::listSection('Browsers', $data['browsers'] ?? [], 'label', 'n', 6, true)
+                self::segChart('Devices', $data['devices'] ?? [], 'label', 'n'),
+                self::segChart('Browsers', $data['browsers'] ?? [], 'label', 'n')
             )
             . self::twoCol(
-                self::listSection('Top pages', $data['top_pages'] ?? [], 'path', 'n', 6, true),
-                self::listSection('Where visitors came from', $data['referrers'] ?? [], 'referer_host', 'n', 6, true)
+                self::segChart('Operating systems', $data['os'] ?? [], 'label', 'n'),
+                self::listSection('Top pages', $data['top_pages'] ?? [], 'path', 'n', 6, true)
             )
+            . self::listSection('Where visitors came from', $data['referrers'] ?? [], 'referer_host', 'n', 8, true)
             . (!empty($data['events']) ? self::listSection('Custom events', $data['events'], 'name', 'n', 6) : '')
             . self::pMuted('Automated report from ' . self::esc((string) config('app.name'))
                 . '. Human figures exclude bots &amp; crawlers; uniques use a privacy-friendly daily hash &mdash; no cookies, no stored IPs.');
@@ -188,8 +191,8 @@ final class Email
             $day = date('D', strtotime((string) $d['date']));
             $cols .= '<td valign="bottom" align="center" style="padding:0 3px;">'
                 . '<div style="font-size:11px;color:' . self::INK . ';font-weight:700;margin-bottom:3px;height:14px;">' . ($humans ?: '') . '</div>'
-                . ($bh > 0 ? '<div style="height:' . $bh . 'px;background:' . self::GOLD . ';opacity:.55;border-radius:3px 3px 0 0;"></div>' : '')
-                . ($hh > 0 ? '<div style="height:' . $hh . 'px;background:' . self::RED . ';border-radius:' . ($bh > 0 ? '0' : '3px 3px 0 0') . ';"></div>' : '<div style="height:2px;background:' . self::LINE . ';"></div>')
+                . ($bh > 0 ? '<div style="height:' . $bh . 'px;background:' . self::MAC_YELLOW . ';border-radius:3px 3px 0 0;"></div>' : '')
+                . ($hh > 0 ? '<div style="height:' . $hh . 'px;background:' . self::MAC_GREEN . ';border-radius:' . ($bh > 0 ? '0' : '3px 3px 0 0') . ';"></div>' : '<div style="height:2px;background:' . self::LINE . ';"></div>')
                 . '<div style="font-size:10px;color:' . self::MUTED . ';margin-top:6px;">' . self::esc(substr($day, 0, 1)) . '</div>'
                 . '</td>';
         }
@@ -271,37 +274,55 @@ final class Email
         $hp = (int) round($human / $tot * 100);
         $bp = 100 - $hp;
         $bar = '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-radius:8px;overflow:hidden;margin:4px 0 6px;"><tr>'
-            . ($hp > 0 ? '<td width="' . $hp . '%" style="background:' . self::GREEN . ';height:20px;font-size:0;line-height:0;">&nbsp;</td>' : '')
-            . ($bp > 0 ? '<td width="' . $bp . '%" style="background:' . self::GOLD . ';height:20px;font-size:0;line-height:0;">&nbsp;</td>' : '')
+            . ($hp > 0 ? '<td width="' . $hp . '%" style="background:' . self::MAC_GREEN . ';height:20px;font-size:0;line-height:0;">&nbsp;</td>' : '')
+            . ($bp > 0 ? '<td width="' . $bp . '%" style="background:' . self::MAC_YELLOW . ';height:20px;font-size:0;line-height:0;">&nbsp;</td>' : '')
             . '</tr></table>';
         $legend = '<div style="font-size:12px;color:' . self::MUTED . ';">'
-            . '<span style="color:' . self::GREEN . ';">&#9632;</span> Humans ' . num($human) . ' (' . $hp . '%)&nbsp;&nbsp;'
-            . '<span style="color:' . self::GOLD . ';">&#9632;</span> Bots ' . num($bot) . ' (' . $bp . '%)</div>';
+            . '<span style="color:' . self::MAC_GREEN . ';">&#9632;</span> Humans ' . num($human) . ' (' . $hp . '%)&nbsp;&nbsp;'
+            . '<span style="color:' . self::MAC_YELLOW . ';">&#9632;</span> Bots ' . num($bot) . ' (' . $bp . '%)</div>';
         return '<h2 style="margin:20px 0 6px;font-size:13px;color:' . self::MUTED . ';text-transform:uppercase;letter-spacing:.08em;">Humans vs bots</h2>' . $bar . $legend;
     }
 
-    /** A colored segmented bar for devices. @param array<int,array<string,mixed>> $rows */
-    private static function segSection(string $title, array $rows): string
+    /**
+     * A colored segmented bar with legend — the email-safe equivalent of the
+     * dashboard donut. Slices use the macOS system palette by index.
+     *
+     * @param array<int,array<string,mixed>> $rows
+     */
+    private static function segChart(string $title, array $rows, string $labelKey = 'label', string $valKey = 'n'): string
     {
+        $rows = array_values(array_filter($rows, static fn ($r) => (int) ($r[$valKey] ?? 0) > 0));
         if (!$rows) {
-            return self::listSection($title, $rows, 'label', 'n', 6, true);
+            return '';
         }
-        $colors = ['Desktop' => '#4f9dff', 'Mobile' => self::GREEN, 'Tablet' => '#af7bff', 'Unknown' => '#9aa3b2'];
+        $palette = ['#34c759', '#007aff', '#ff9500', '#af52de', '#ff2d55', '#32ade6', '#ffcc00', '#00c7be'];
         $tot = 0;
         foreach ($rows as $r) {
-            $tot += (int) $r['n'];
+            $tot += (int) $r[$valKey];
         }
         $tot = max(1, $tot);
         $seg = '';
         $legend = '';
-        foreach ($rows as $r) {
-            $label = (string) ($r['label'] ?? 'Unknown');
-            $c = $colors[$label] ?? '#9aa3b2';
-            $pc = (int) round((int) $r['n'] / $tot * 100);
-            if ($pc > 0) {
-                $seg .= '<td width="' . $pc . '%" style="background:' . $c . ';height:20px;font-size:0;line-height:0;">&nbsp;</td>';
+        $shown = 0;
+        $i = 0;
+        foreach (array_slice($rows, 0, 8) as $r) {
+            $label = (string) ($r[$labelKey] ?? '');
+            if ($label === '') {
+                $label = 'Unknown';
             }
-            $legend .= '<span style="white-space:nowrap;margin-right:12px;"><span style="color:' . $c . ';">&#9632;</span> ' . self::esc($label) . ' ' . $pc . '%</span> ';
+            $c = $palette[$i % count($palette)];
+            $pc = (int) round((int) $r[$valKey] / $tot * 100);
+            if ($pc > 0) {
+                $seg .= '<td width="' . $pc . '%" style="background:' . $c . ';height:22px;font-size:0;line-height:0;">&nbsp;</td>';
+                $shown += $pc;
+            }
+            $legend .= '<span style="white-space:nowrap;margin-right:14px;display:inline-block;">'
+                . '<span style="color:' . $c . ';">&#9632;</span> ' . self::esc($label) . ' ' . $pc . '%</span> ';
+            $i++;
+        }
+        // Fill any remainder (rounding / categories beyond the top 8) neutrally.
+        if ($shown < 100) {
+            $seg .= '<td width="' . (100 - $shown) . '%" style="background:#e6e8ec;height:22px;font-size:0;line-height:0;">&nbsp;</td>';
         }
         return '<h2 style="margin:18px 0 6px;font-size:13px;color:' . self::MUTED . ';text-transform:uppercase;letter-spacing:.08em;">' . self::esc($title) . '</h2>'
             . '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-radius:8px;overflow:hidden;"><tr>' . $seg . '</tr></table>'

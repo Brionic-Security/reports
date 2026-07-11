@@ -17,6 +17,16 @@ use App\Support\Database;
  */
 final class Ingest
 {
+    /**
+     * Identical pageviews from the same visitor+path arriving within this many
+     * seconds are treated as a single view. Client scripts can fire more than
+     * once per navigation (speed-optimiser duplication, combined/inlined
+     * bundles, browser prefetch, SPA quirks); a human cannot meaningfully
+     * reload and re-read a page this fast, so a tight window only collapses
+     * machine double-fires without dropping genuine re-visits.
+     */
+    private const DEDUPE_SECONDS = 2;
+
     public static function record(
         string $siteKey,
         string $path,
@@ -33,6 +43,19 @@ final class Ingest
             return false;
         }
 
+        $siteId      = (int) $site['id'];
+        $eventType   = $type === 'event' ? 'event' : 'pageview';
+        $path        = substr(self::cleanPath($path), 0, 255);
+        $visitorHash = self::visitorHash($siteId, $ip, $userAgent);
+
+        // Drop machine double-fires: an identical pageview from the same
+        // visitor+path within a couple of seconds is a duplicate, not a real
+        // second view. Custom events are exempt (they can legitimately repeat).
+        if ($eventType === 'pageview'
+            && self::isDuplicatePageview($siteId, $visitorHash, $path)) {
+            return true;
+        }
+
         [$isBot, $botName] = UserAgent::classify($userAgent);
         $ua = UserAgent::parse($userAgent);
         $geo = Geo::lookup($ip);
@@ -43,10 +66,10 @@ final class Ingest
                  browser, os, device, country, city, country_code, lat, lon, visitor_hash, via, created_at)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
             [
-                (int) $site['id'],
-                $type === 'event' ? 'event' : 'pageview',
+                $siteId,
+                $eventType,
                 $name !== null ? substr($name, 0, 80) : null,
-                substr(self::cleanPath($path), 0, 255),
+                $path,
                 self::refererHost($referrer, (string) $site['domain']),
                 $isBot ? 1 : 0,
                 substr($botName, 0, 60),
@@ -58,12 +81,26 @@ final class Ingest
                 $geo['country_code'] ?? '',
                 $geo['lat'] ?? null,
                 $geo['lon'] ?? null,
-                self::visitorHash((int) $site['id'], $ip, $userAgent),
+                $visitorHash,
                 self::cleanVia($via),
                 now(),
             ]
         );
         return true;
+    }
+
+    /** True if an identical pageview was recorded within the dedupe window. */
+    private static function isDuplicatePageview(int $siteId, string $visitorHash, string $path): bool
+    {
+        $since = gmdate('Y-m-d H:i:s', time() - self::DEDUPE_SECONDS);
+        $row = Database::selectOne(
+            "SELECT 1 FROM events
+             WHERE site_id = ? AND type = 'pageview' AND visitor_hash = ?
+               AND path = ? AND created_at >= ?
+             LIMIT 1",
+            [$siteId, $visitorHash, $path, $since]
+        );
+        return $row !== null;
     }
 
     /** Normalise the install-method marker to a short known token. */
