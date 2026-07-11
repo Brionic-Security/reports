@@ -13,10 +13,22 @@ final class Kernel
 
     public function __construct()
     {
-        Session::start();
+        // The public tracker endpoints (/b.js, /collect) are stateless and
+        // cross-origin; starting a session there only emits a needless
+        // Set-Cookie (third-party noise + blocks edge caching of the tracker).
+        if (!self::isStatelessPath()) {
+            Session::start();
+        }
         $this->router = new Router();
         $this->registerMiddleware();
         $this->loadRoutes();
+    }
+
+    /** True for public, cookieless endpoints served cross-origin. */
+    private static function isStatelessPath(): bool
+    {
+        $path = '/' . trim((string) (parse_url((string) ($_SERVER['REQUEST_URI'] ?? '/'), PHP_URL_PATH) ?: '/'), '/');
+        return $path === '/b.js' || $path === '/collect';
     }
 
     public function router(): Router
