@@ -16,6 +16,7 @@
       <nav class="nav">
         <a href="<?= app_url('dashboard') ?>" class="<?= ($nav ?? '') === 'dashboard' ? 'active' : '' ?>">Overview</a>
         <a href="<?= app_url('sites') ?>" class="<?= ($nav ?? '') === 'sites' ? 'active' : '' ?>">Sites</a>
+        <a href="<?= app_url('integrations') ?>" class="<?= ($nav ?? '') === 'integrations' ? 'active' : '' ?>">Integrations</a>
         <form method="post" action="<?= app_url('logout') ?>" style="margin:0">
           <?= csrf_field() ?>
           <button class="btn btn-sm" type="submit">Sign out</button>

@@ -90,6 +90,129 @@ $this->layout('layout', ['title' => $site['name'] . ' settings · Brionic Report
   </div>
 </div>
 
+<div class="card mt" id="search">
+  <h2>Search engines &amp; indexing</h2>
+  <?php
+    $s = $search ?? [];
+    $cg = $s['conn_google'] ?? null;
+    $cb = $s['conn_bing'] ?? null;
+    $tot = $s['totals'] ?? ['clicks' => 0, 'impressions' => 0, 'ctr' => 0, 'position' => 0];
+  ?>
+  <?php if (empty($s['google_configured']) && empty($s['bing_configured'])): ?>
+    <p class="muted" style="margin-top:0">Not set up yet. Connect Google Search Console and/or Bing on the <a href="<?= app_url('integrations') ?>">Integrations</a> page first.</p>
+  <?php else: ?>
+
+  <div class="grid" style="margin-top:4px">
+    <!-- Google -->
+    <div class="connect-method <?= ($cg && $cg['status'] === 'verified') ? 'is-connected' : '' ?>">
+      <h3><span class="cm-num">G</span> Google Search Console
+        <?php if ($cg && $cg['status'] === 'verified'): ?><span class="cm-badge">&#10003; Verified</span>
+        <?php elseif ($cg): ?><span class="cm-tag">pending</span><?php endif; ?>
+      </h3>
+      <?php if (empty($s['google_connected'])): ?>
+        <p class="muted">Connect a Google account on <a href="<?= app_url('integrations') ?>">Integrations</a> to enable this.</p>
+      <?php elseif (!$cg): ?>
+        <p class="muted">Add this site to Search Console and verify ownership automatically.</p>
+        <form method="post" action="<?= app_url('sites/' . $site['id'] . '/search/connect') ?>">
+          <?= csrf_field() ?><input type="hidden" name="provider" value="google">
+          <button class="btn btn-primary btn-sm" type="submit">Connect Google</button>
+        </form>
+      <?php else: ?>
+        <p class="muted" style="font-size:.82rem">Property <code><?= e($cg['property']) ?></code> &middot; <?= e($cg['detail']) ?></p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <?php if ($cg['status'] !== 'verified'): ?>
+            <form method="post" action="<?= app_url('sites/' . $site['id'] . '/search/verify') ?>" style="margin:0">
+              <?= csrf_field() ?><button class="btn btn-primary btn-sm" type="submit">&#8635; Verify</button>
+            </form>
+          <?php endif; ?>
+          <form method="post" action="<?= app_url('sites/' . $site['id'] . '/search/disconnect') ?>" style="margin:0">
+            <?= csrf_field() ?><input type="hidden" name="provider" value="google">
+            <button class="btn btn-sm" type="submit">Disconnect</button>
+          </form>
+        </div>
+      <?php endif; ?>
+    </div>
+
+    <!-- Bing -->
+    <div class="connect-method <?= ($cb && $cb['status'] === 'verified') ? 'is-connected' : '' ?>">
+      <h3><span class="cm-num">B</span> Bing Webmaster
+        <?php if ($cb && $cb['status'] === 'verified'): ?><span class="cm-badge">&#10003; Connected</span>
+        <?php elseif ($cb): ?><span class="cm-tag">pending</span><?php endif; ?>
+      </h3>
+      <?php if (empty($s['bing_configured'])): ?>
+        <p class="muted">Add a Bing API key on <a href="<?= app_url('integrations') ?>">Integrations</a> to enable this.</p>
+      <?php elseif (!$cb): ?>
+        <p class="muted">Add this site to Bing and enable IndexNow-based indexing.</p>
+        <form method="post" action="<?= app_url('sites/' . $site['id'] . '/search/connect') ?>">
+          <?= csrf_field() ?><input type="hidden" name="provider" value="bing">
+          <button class="btn btn-primary btn-sm" type="submit">Connect Bing</button>
+        </form>
+      <?php else: ?>
+        <p class="muted" style="font-size:.82rem">Site <code><?= e($cb['property']) ?></code> &middot; <?= e($cb['detail']) ?></p>
+        <form method="post" action="<?= app_url('sites/' . $site['id'] . '/search/disconnect') ?>" style="margin:0">
+          <?= csrf_field() ?><input type="hidden" name="provider" value="bing">
+          <button class="btn btn-sm" type="submit">Disconnect</button>
+        </form>
+      <?php endif; ?>
+    </div>
+  </div>
+
+  <?php if ($cg || $cb): ?>
+  <hr style="border:none;border-top:1px solid var(--line);margin:18px 0">
+  <div class="grid">
+    <div>
+      <h3 style="margin:0 0 8px">Request indexing</h3>
+      <p class="muted" style="margin-top:0;font-size:.85rem">Submits your sitemap to Google and pushes URLs to Bing + IndexNow. Leave blank to submit the homepage. One URL or path per line.</p>
+      <form method="post" action="<?= app_url('sites/' . $site['id'] . '/search/index') ?>">
+        <?= csrf_field() ?>
+        <textarea class="input" name="urls" rows="3" placeholder="/&#10;/blog/new-post&#10;https://<?= e($site['domain']) ?>/pricing"></textarea>
+        <button class="btn btn-primary btn-sm mt" type="submit">&#9889; Request indexing now</button>
+      </form>
+    </div>
+    <div>
+      <h3 style="margin:0 0 8px">Search performance <span class="muted" style="font-weight:400;font-size:.8rem">(last 28 days)</span></h3>
+      <?php if (!empty($s['has_metrics'])): ?>
+        <div class="stat-row" style="display:flex;gap:18px;flex-wrap:wrap">
+          <div><div class="stat-num"><?= number_format((int) $tot['clicks']) ?></div><div class="muted" style="font-size:.78rem">Clicks</div></div>
+          <div><div class="stat-num"><?= number_format((int) $tot['impressions']) ?></div><div class="muted" style="font-size:.78rem">Impressions</div></div>
+          <div><div class="stat-num"><?= number_format((float) $tot['ctr'] * 100, 1) ?>%</div><div class="muted" style="font-size:.78rem">CTR</div></div>
+          <div><div class="stat-num"><?= number_format((float) $tot['position'], 1) ?></div><div class="muted" style="font-size:.78rem">Avg position</div></div>
+        </div>
+        <?php if (!empty($s['top_queries'])): ?>
+          <table class="table mt"><thead><tr><th>Top query</th><th>Clicks</th><th>Impr.</th></tr></thead><tbody>
+            <?php foreach ($s['top_queries'] as $q): ?>
+              <tr><td><?= e($q['label']) ?></td><td><?= number_format((int) $q['clicks']) ?></td><td><?= number_format((int) $q['impressions']) ?></td></tr>
+            <?php endforeach; ?>
+          </tbody></table>
+        <?php endif; ?>
+      <?php else: ?>
+        <p class="muted" style="font-size:.85rem">No data synced yet. Verify a property, then click “Sync search data”.</p>
+      <?php endif; ?>
+      <form method="post" action="<?= app_url('sites/' . $site['id'] . '/search/sync') ?>" style="margin-top:8px">
+        <?= csrf_field() ?><button class="btn btn-sm" type="submit">&#8635; Sync search data</button>
+      </form>
+    </div>
+  </div>
+  <?php endif; ?>
+
+  <?php if (!empty($s['requests'])): ?>
+    <h3 style="margin:18px 0 8px">Recent indexing requests</h3>
+    <table class="table"><thead><tr><th>Engine</th><th>Type</th><th>Target</th><th>Status</th><th>When</th></tr></thead><tbody>
+      <?php foreach ($s['requests'] as $rq): ?>
+        <tr>
+          <td><?= e(ucfirst($rq['provider'])) ?></td>
+          <td><?= e($rq['kind']) ?></td>
+          <td style="max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><?= e($rq['target']) ?></td>
+          <td><span class="badge <?= $rq['status'] === 'ok' ? 'human' : 'bot' ?>"><?= e($rq['status']) ?></span></td>
+          <td><?= e(time_ago($rq['created_at'])) ?></td>
+        </tr>
+      <?php endforeach; ?>
+    </tbody></table>
+  <?php endif; ?>
+
+  <?php endif; ?>
+</div>
+
 <div class="card mt">
   <h2>Weekly client report</h2>
   <p class="muted" style="margin-top:0">

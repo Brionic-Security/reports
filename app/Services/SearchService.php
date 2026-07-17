@@ -1,0 +1,321 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Services;
+
+use App\Models\IndexRequest;
+use App\Models\SearchConnection;
+use App\Models\SearchMetric;
+use App\Models\Site;
+
+/**
+ * High-level orchestration for connecting a site to Google Search Console and
+ * Bing, verifying ownership, requesting indexing (sitemap for Google, URL
+ * submission + IndexNow for Bing), and syncing search-performance data.
+ */
+final class SearchService
+{
+    /** Bare domain for a site (no scheme/path). */
+    public static function domain(array $site): string
+    {
+        return Site::normalizeDomain((string) $site['domain']);
+    }
+
+    public static function homeUrl(array $site): string
+    {
+        return 'https://' . self::domain($site) . '/';
+    }
+
+    public static function sitemapUrl(array $site): string
+    {
+        return 'https://' . self::domain($site) . '/sitemap.xml';
+    }
+
+    /**
+     * Connect a site to Google Search Console. Prefers DNS-TXT (domain
+     * property) via Cloudflare when the zone is in the operator's account;
+     * otherwise sets up a URL-prefix property verified by a meta tag (served by
+     * the Brionic WordPress plugin, or added manually).
+     *
+     * @return array{ok:bool,status:string,message:string}
+     */
+    public static function connectGoogle(array $site): array
+    {
+        if (!GoogleOAuth::connected()) {
+            return ['ok' => false, 'status' => 'error', 'message' => 'Connect a Google account first (Integrations).'];
+        }
+        $siteId = (int) $site['id'];
+        $domain = self::domain($site);
+
+        // Path A: DNS-TXT domain property via Cloudflare.
+        if (Cloudflare::configured()) {
+            $zone = Cloudflare::findZone($domain);
+            if ($zone['ok']) {
+                $identifier = $domain;                      // INET_DOMAIN
+                $property   = 'sc-domain:' . $domain;
+                $tok = GoogleSearchConsole::getVerificationToken($identifier, 'DNS_TXT');
+                if ($tok['ok'] && $tok['token'] !== '') {
+                    $dns = Cloudflare::upsertTxt($zone['zone_id'], $domain, $tok['token']);
+                    if ($dns['ok']) {
+                        // DNS can take a moment; attempt verify, but store either way.
+                        $ver = GoogleSearchConsole::verify($identifier, 'DNS_TXT');
+                        GoogleSearchConsole::addSite($property);
+                        SearchConnection::upsert($siteId, 'google', [
+                            'property'      => $property,
+                            'property_type' => 'domain',
+                            'verification'  => 'dns',
+                            'verify_token'  => $tok['token'],
+                            'status'        => $ver['ok'] ? 'verified' : 'pending',
+                            'detail'        => $ver['ok'] ? 'Verified via Cloudflare DNS.' : 'DNS record added — verifying (may take a few minutes).',
+                        ]);
+                        return $ver['ok']
+                            ? ['ok' => true, 'status' => 'verified', 'message' => 'Google verified via Cloudflare DNS.']
+                            : ['ok' => true, 'status' => 'pending', 'message' => 'DNS TXT added via Cloudflare — click Verify again in a few minutes.'];
+                    }
+                }
+            }
+        }
+
+        // Path B: URL-prefix property, meta-tag verification (WP plugin / manual).
+        $identifier = self::homeUrl($site);
+        $tok = GoogleSearchConsole::getVerificationToken($identifier, 'META');
+        if (!$tok['ok']) {
+            return ['ok' => false, 'status' => 'error', 'message' => 'Google: ' . $tok['error']];
+        }
+        $ver = GoogleSearchConsole::verify($identifier, 'META');
+        GoogleSearchConsole::addSite($identifier);
+        SearchConnection::upsert($siteId, 'google', [
+            'property'      => $identifier,
+            'property_type' => 'url',
+            'verification'  => 'meta',
+            'verify_token'  => $tok['token'],
+            'status'        => $ver['ok'] ? 'verified' : 'pending',
+            'detail'        => $ver['ok']
+                ? 'Verified via meta tag.'
+                : 'Add the meta tag (Brionic WP plugin does this automatically), then Verify.',
+        ]);
+        return $ver['ok']
+            ? ['ok' => true, 'status' => 'verified', 'message' => 'Google verified.']
+            : ['ok' => true, 'status' => 'pending', 'message' => 'Google property added. Install/refresh the WP plugin so the meta tag is served, then click Verify.'];
+    }
+
+    /** Re-attempt verification for an existing pending Google connection. */
+    public static function verifyGoogle(array $site): array
+    {
+        $conn = SearchConnection::find((int) $site['id'], 'google');
+        if ($conn === null) {
+            return ['ok' => false, 'status' => 'error', 'message' => 'Not connected to Google yet.'];
+        }
+        $method = $conn['verification'] === 'dns' ? 'DNS_TXT' : 'META';
+        $identifier = $conn['property_type'] === 'domain' ? self::domain($site) : self::homeUrl($site);
+        $ver = GoogleSearchConsole::verify($identifier, $method);
+        SearchConnection::setStatus(
+            (int) $site['id'],
+            'google',
+            $ver['ok'] ? 'verified' : 'pending',
+            $ver['ok'] ? 'Verified.' : ('Not verified yet: ' . $ver['error'])
+        );
+        return $ver['ok']
+            ? ['ok' => true, 'status' => 'verified', 'message' => 'Google ownership verified.']
+            : ['ok' => false, 'status' => 'pending', 'message' => 'Still not verified: ' . $ver['error']];
+    }
+
+    /**
+     * Connect a site to Bing. Adds the site via the API; indexing works
+     * immediately through IndexNow (key file served by the WP plugin). Stats
+     * require the site to be verified in Bing — easiest via one-click "Import
+     * from Google Search Console" in the Bing UI.
+     *
+     * @return array{ok:bool,status:string,message:string}
+     */
+    public static function connectBing(array $site): array
+    {
+        if (!BingWebmaster::configured()) {
+            return ['ok' => false, 'status' => 'error', 'message' => 'Add a Bing Webmaster API key first (Integrations).'];
+        }
+        $siteId = (int) $site['id'];
+        $siteUrl = self::homeUrl($site);
+        $add = BingWebmaster::addSite($siteUrl);
+        SearchConnection::upsert($siteId, 'bing', [
+            'property'      => $siteUrl,
+            'property_type' => 'url',
+            'verification'  => 'indexnow',
+            'verify_token'  => IndexNow::key(),
+            'status'        => $add['ok'] ? 'verified' : 'pending',
+            'detail'        => $add['ok']
+                ? 'Added to Bing. Indexing enabled via IndexNow.'
+                : ('Bing add-site: ' . $add['error']),
+        ]);
+        return $add['ok']
+            ? ['ok' => true, 'status' => 'verified', 'message' => 'Bing connected. Indexing enabled via IndexNow.']
+            : ['ok' => false, 'status' => 'pending', 'message' => 'Bing: ' . $add['error']];
+    }
+
+    /**
+     * Request (re)indexing across connected engines. Google = submit sitemap;
+     * Bing = submit the URLs + IndexNow ping.
+     *
+     * @param string[] $urls  absolute URLs; defaults to the homepage
+     * @return array<int,string>  human-readable per-engine results
+     */
+    public static function requestIndexing(array $site, array $urls = []): array
+    {
+        $siteId = (int) $site['id'];
+        $domain = self::domain($site);
+        if ($urls === []) {
+            $urls = [self::homeUrl($site)];
+        }
+        $out = [];
+
+        // Google — sitemap submission (the supported crawl signal).
+        $g = SearchConnection::find($siteId, 'google');
+        if ($g !== null && $g['status'] === 'verified') {
+            $sitemap = self::sitemapUrl($site);
+            $res = GoogleSearchConsole::submitSitemap((string) $g['property'], $sitemap);
+            IndexRequest::log($siteId, 'google', 'sitemap', $sitemap, $res['ok'] ? 'ok' : 'error', $res['error']);
+            $out[] = $res['ok']
+                ? 'Google: sitemap submitted (' . $sitemap . ').'
+                : 'Google: sitemap failed — ' . $res['error'];
+        }
+
+        // Bing — direct URL submission.
+        $b = SearchConnection::find($siteId, 'bing');
+        if ($b !== null) {
+            $res = BingWebmaster::submitUrls((string) $b['property'], $urls);
+            IndexRequest::log($siteId, 'bing', 'url', implode(' ', $urls), $res['ok'] ? 'ok' : 'error', $res['error']);
+            $out[] = $res['ok']
+                ? 'Bing: submitted ' . count($urls) . ' URL(s).'
+                : 'Bing: submit failed — ' . $res['error'];
+        }
+
+        // IndexNow — instant ping (Bing/Yandex/etc).
+        if (IndexNow::configured()) {
+            $res = IndexNow::submit($domain, $urls);
+            IndexRequest::log($siteId, 'indexnow', 'indexnow', implode(' ', $urls), $res['ok'] ? 'ok' : 'error', $res['error']);
+            $out[] = $res['ok']
+                ? 'IndexNow: pinged ' . count($urls) . ' URL(s).'
+                : 'IndexNow: ' . $res['error'];
+        }
+
+        if ($out === []) {
+            $out[] = 'No search engines connected yet.';
+        }
+        return $out;
+    }
+
+    /**
+     * Pull the last N days of search-performance data into search_metrics for
+     * one site (both providers, whichever are verified).
+     *
+     * @return array<int,string> per-provider summary
+     */
+    public static function syncMetrics(array $site, int $days = 30): array
+    {
+        $siteId = (int) $site['id'];
+        $out = [];
+        // GSC lag: data is final ~3 days back; query a window ending 2 days ago.
+        $end   = gmdate('Y-m-d', time() - 2 * 86400);
+        $start = gmdate('Y-m-d', time() - ($days + 2) * 86400);
+
+        $g = SearchConnection::find($siteId, 'google');
+        if ($g !== null && $g['status'] === 'verified' && GoogleOAuth::connected()) {
+            $property = (string) $g['property'];
+            $n = 0;
+            $byDate = GoogleSearchConsole::searchAnalytics($property, $start, $end, ['date'], 500);
+            if ($byDate['ok']) {
+                foreach ($byDate['rows'] as $row) {
+                    $day = (string) ($row['keys'][0] ?? '');
+                    if ($day === '') { continue; }
+                    SearchMetric::record($siteId, 'google', $day, 'total', '', [
+                        'clicks'      => $row['clicks'] ?? 0,
+                        'impressions' => $row['impressions'] ?? 0,
+                        'ctr'         => $row['ctr'] ?? 0,
+                        'position'    => $row['position'] ?? 0,
+                    ]);
+                    $n++;
+                }
+            }
+            $today = gmdate('Y-m-d');
+            foreach (['query', 'page'] as $dim) {
+                $res = GoogleSearchConsole::searchAnalytics($property, $start, $end, [$dim], 25);
+                if (!$res['ok']) { continue; }
+                foreach ($res['rows'] as $row) {
+                    SearchMetric::record($siteId, 'google', $today, $dim, (string) ($row['keys'][0] ?? ''), [
+                        'clicks'      => $row['clicks'] ?? 0,
+                        'impressions' => $row['impressions'] ?? 0,
+                        'ctr'         => $row['ctr'] ?? 0,
+                        'position'    => $row['position'] ?? 0,
+                    ]);
+                }
+            }
+            SearchConnection::markSynced((int) $g['id']);
+            $out[] = 'Google: ' . $n . ' day(s) synced.';
+        }
+
+        $b = SearchConnection::find($siteId, 'bing');
+        if ($b !== null && BingWebmaster::configured()) {
+            $siteUrl = (string) $b['property'];
+            $traffic = BingWebmaster::trafficStats($siteUrl);
+            $n = 0;
+            if ($traffic['ok']) {
+                foreach ($traffic['rows'] as $row) {
+                    $day = self::bingDate($row['Date'] ?? '');
+                    if ($day === '') { continue; }
+                    SearchMetric::record($siteId, 'bing', $day, 'total', '', [
+                        'clicks'      => $row['Clicks'] ?? 0,
+                        'impressions' => $row['Impressions'] ?? 0,
+                        'ctr'         => (int) ($row['Impressions'] ?? 0) > 0 ? ($row['Clicks'] ?? 0) / $row['Impressions'] : 0,
+                        'position'    => $row['AvgImpressionPosition'] ?? 0,
+                    ]);
+                    $n++;
+                }
+            }
+            $today = gmdate('Y-m-d');
+            $queries = BingWebmaster::queryStats($siteUrl);
+            if ($queries['ok']) {
+                foreach (array_slice($queries['rows'], 0, 25) as $row) {
+                    SearchMetric::record($siteId, 'bing', $today, 'query', (string) ($row['Query'] ?? ''), [
+                        'clicks'      => $row['Clicks'] ?? 0,
+                        'impressions' => $row['Impressions'] ?? 0,
+                        'position'    => $row['AvgImpressionPosition'] ?? 0,
+                    ]);
+                }
+            }
+            SearchConnection::markSynced((int) $b['id']);
+            $out[] = 'Bing: ' . $n . ' day(s) synced.';
+        }
+
+        if ($out === []) {
+            $out[] = 'Nothing to sync (no verified connections).';
+        }
+        return $out;
+    }
+
+    /** Bing dates arrive as "/Date(1700000000000)/". Normalize to YYYY-MM-DD. */
+    private static function bingDate(mixed $raw): string
+    {
+        if (is_string($raw) && preg_match('/(\d{10,13})/', $raw, $m)) {
+            $ms = (int) $m[1];
+            $sec = $ms > 20000000000 ? intdiv($ms, 1000) : $ms;
+            return gmdate('Y-m-d', $sec);
+        }
+        return '';
+    }
+
+    /**
+     * Verification tokens + IndexNow key for a site, consumed by the Brionic
+     * WordPress plugin to inject meta tags and serve the key file.
+     *
+     * @return array{google_meta:string,indexnow_key:string}
+     */
+    public static function tagsForSite(array $site): array
+    {
+        $g = SearchConnection::find((int) $site['id'], 'google');
+        $googleMeta = ($g !== null && $g['verification'] === 'meta') ? (string) $g['verify_token'] : '';
+        return [
+            'google_meta'  => $googleMeta,
+            'indexnow_key' => IndexNow::key(),
+        ];
+    }
+}

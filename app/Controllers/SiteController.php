@@ -29,8 +29,35 @@ final class SiteController
         }
 
         $site = Site::create($name, $domain, $email !== '' ? $email : null);
-        Session::flash('ok', 'Site added. Copy the snippet below into your website.');
+
+        // Best-effort: auto-connect to any configured search engines so the new
+        // site starts getting indexed + tracked without extra manual steps.
+        $note = self::autoConnectSearch($site);
+
+        Session::flash('ok', 'Site added. Copy the snippet below into your website.' . $note);
         return Response::redirect(app_url('sites/' . $site['id'] . '/settings'));
+    }
+
+    /**
+     * Try to connect a freshly-added site to Google + Bing when those are
+     * configured. Never throws — search setup must not block site creation.
+     */
+    private static function autoConnectSearch(array $site): string
+    {
+        $done = [];
+        try {
+            if (\App\Services\GoogleOAuth::connected()) {
+                $r = \App\Services\SearchService::connectGoogle($site);
+                if ($r['ok']) { $done[] = 'Google (' . $r['status'] . ')'; }
+            }
+            if (\App\Services\BingWebmaster::configured()) {
+                $r = \App\Services\SearchService::connectBing($site);
+                if ($r['ok']) { $done[] = 'Bing'; }
+            }
+        } catch (\Throwable $e) {
+            logger('autoConnectSearch failed', ['site' => $site['id'], 'err' => $e->getMessage()]);
+        }
+        return $done === [] ? '' : ' Search engines: ' . implode(', ', $done) . ' — see Search engines below.';
     }
 
     public function show(Request $request, array $params): Response
@@ -46,7 +73,31 @@ final class SiteController
             'error'      => Session::getFlash('error'),
             'runs'       => \App\Models\ReportRun::recentForSite((int) $site['id'], 6),
             'connection' => self::connectionStatus((int) $site['id']),
+            'search'     => self::searchData($site),
         ]));
+    }
+
+    /**
+     * Search-engine connection state + performance summary for the settings
+     * page "Search engines" card.
+     */
+    private static function searchData(array $site): array
+    {
+        $id = (int) $site['id'];
+        $to = gmdate('Y-m-d');
+        $from = gmdate('Y-m-d', time() - 28 * 86400);
+        return [
+            'google_configured' => \App\Services\GoogleOAuth::configured(),
+            'google_connected'  => \App\Services\GoogleOAuth::connected(),
+            'bing_configured'   => \App\Services\BingWebmaster::configured(),
+            'indexnow'          => \App\Services\IndexNow::configured(),
+            'conn_google'       => \App\Models\SearchConnection::find($id, 'google'),
+            'conn_bing'         => \App\Models\SearchConnection::find($id, 'bing'),
+            'totals'            => \App\Models\SearchMetric::totals($id, $from, $to),
+            'has_metrics'       => \App\Models\SearchMetric::hasAny($id),
+            'top_queries'       => \App\Models\SearchMetric::top($id, 'query', $from, $to, null, 10),
+            'requests'          => \App\Models\IndexRequest::recentForSite($id, 8),
+        ];
     }
 
     /**

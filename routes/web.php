@@ -7,6 +7,7 @@ use App\Controllers\CollectController;
 use App\Controllers\DashboardController;
 use App\Controllers\DownloadController;
 use App\Controllers\ReportController;
+use App\Controllers\SearchController;
 use App\Controllers\SiteController;
 use App\Controllers\TrackerController;
 use App\Support\Response;
@@ -29,6 +30,15 @@ return function (Router $router): void {
     // Server-side connection check for the WordPress plugin's "Test" button.
     $router->get('/api/verify', [CollectController::class, 'verify']);
     $router->post('/api/verify', [CollectController::class, 'verify']);
+
+    // Search-engine verification tags + IndexNow key for the WordPress plugin.
+    $router->get('/api/search-tags', [SearchController::class, 'siteTags']);
+
+    // IndexNow key file for our own domain (client sites serve their own).
+    $indexNowKey = (string) config('search.indexnow.key', '');
+    if ($indexNowKey !== '') {
+        $router->get('/' . $indexNowKey . '.txt', [SearchController::class, 'indexNowKey']);
+    }
 
     // ── Auth ─────────────────────────────────────────────────────────────────
     $router->get('/login', [AuthController::class, 'showLogin'], ['guest']);
@@ -56,5 +66,17 @@ return function (Router $router): void {
         $r->get('/sites/{id}/report', [ReportController::class, 'preview']);
         $r->post('/sites/{id}/report/send', [ReportController::class, 'send'], ['csrf']);
         $r->post('/sites/{id}/report/test', [ReportController::class, 'test'], ['csrf']);
+
+        // Search-engine integrations (Google Search Console + Bing).
+        $r->get('/integrations', [SearchController::class, 'integrations']);
+        $r->get('/integrations/google/connect', [SearchController::class, 'googleConnect']);
+        $r->get('/integrations/google/callback', [SearchController::class, 'googleCallback']);
+        $r->post('/integrations/google/disconnect', [SearchController::class, 'googleDisconnect'], ['csrf']);
+
+        $r->post('/sites/{id}/search/connect', [SearchController::class, 'connect'], ['csrf']);
+        $r->post('/sites/{id}/search/verify', [SearchController::class, 'verify'], ['csrf']);
+        $r->post('/sites/{id}/search/index', [SearchController::class, 'index'], ['csrf']);
+        $r->post('/sites/{id}/search/sync', [SearchController::class, 'sync'], ['csrf']);
+        $r->post('/sites/{id}/search/disconnect', [SearchController::class, 'disconnect'], ['csrf']);
     });
 };
