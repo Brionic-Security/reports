@@ -135,6 +135,41 @@ final class GoogleSearchConsole
     }
 
     /**
+     * List all sitemaps registered for a property.
+     *
+     * @return array{ok:bool,sitemaps:array,error:string}
+     */
+    public static function listSitemaps(string $property): array
+    {
+        $headers = self::authHeader();
+        if ($headers === []) {
+            return ['ok' => false, 'sitemaps' => [], 'error' => 'Google not connected'];
+        }
+        $url = self::SC . '/sites/' . rawurlencode($property) . '/sitemaps';
+        $res = Http::get($url, $headers);
+        if (!$res['ok'] || !is_array($res['json'])) {
+            return ['ok' => false, 'sitemaps' => [], 'error' => $res['error'] ?: 'list sitemaps failed'];
+        }
+        return ['ok' => true, 'sitemaps' => $res['json']['sitemap'] ?? [], 'error' => ''];
+    }
+
+    /**
+     * Remove a submitted sitemap from a property.
+     *
+     * @return array{ok:bool,error:string}
+     */
+    public static function deleteSitemap(string $property, string $sitemapUrl): array
+    {
+        $headers = self::authHeader();
+        if ($headers === []) {
+            return ['ok' => false, 'error' => 'Google not connected'];
+        }
+        $url = self::SC . '/sites/' . rawurlencode($property) . '/sitemaps/' . rawurlencode($sitemapUrl);
+        $res = Http::request('DELETE', $url, null, $headers);
+        return ['ok' => $res['ok'], 'error' => $res['ok'] ? '' : ($res['error'] ?: 'sitemap delete failed')];
+    }
+
+    /**
      * Query Search Analytics.
      *
      * @param string[] $dimensions e.g. ['date'] or ['query']
