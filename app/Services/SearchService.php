@@ -29,7 +29,47 @@ final class SearchService
 
     public static function sitemapUrl(array $site): string
     {
-        return 'https://' . self::domain($site) . '/sitemap.xml';
+        return self::discoverSitemap($site);
+    }
+
+    /**
+     * Find the site's real sitemap: prefer the Sitemap: directive in robots.txt
+     * (covers Astro's /sitemap-index.xml etc.), else probe common filenames,
+     * else default to /sitemap.xml. Cached ~6h. Best-effort.
+     */
+    public static function discoverSitemap(array $site): string
+    {
+        $domain = self::domain($site);
+        $base = 'https://' . $domain;
+        $default = $base . '/sitemap.xml';
+        $cacheFile = storage_path('cache/sitemaploc_' . preg_replace('/[^a-z0-9]+/i', '_', $domain) . '.txt');
+        if (is_file($cacheFile) && (time() - (int) filemtime($cacheFile) < 21600)) {
+            $c = trim((string) @file_get_contents($cacheFile));
+            if ($c !== '') {
+                return $c;
+            }
+        }
+        $found = '';
+        // 1) robots.txt "Sitemap:" directive.
+        $robots = \App\Support\Http::get($base . '/robots.txt', [], 6, 5);
+        if ($robots['ok'] && is_string($robots['body']) && preg_match('/^\s*sitemap:\s*(\S+)/im', (string) $robots['body'], $m)) {
+            $found = trim($m[1]);
+        }
+        // 2) Common filenames.
+        if ($found === '') {
+            foreach (['/sitemap.xml', '/sitemap_index.xml', '/sitemap-index.xml'] as $path) {
+                $r = \App\Support\Http::get($base . $path, [], 6, 5);
+                if ($r['ok']) {
+                    $found = $base . $path;
+                    break;
+                }
+            }
+        }
+        if ($found === '') {
+            $found = $default;
+        }
+        @file_put_contents($cacheFile, $found);
+        return $found;
     }
 
     /**
@@ -69,7 +109,7 @@ final class SearchService
                 return array_slice($cached, 0, $limit);
             }
         }
-        $urls = self::crawlSitemap('https://' . $domain . '/sitemap.xml', $limit, 0);
+        $urls = self::crawlSitemap(self::discoverSitemap($site), $limit, 0);
         @file_put_contents($cacheFile, json_encode($urls));
         return array_slice($urls, 0, $limit);
     }
