@@ -73,6 +73,14 @@ $this->layout('layout', ['title' => $site['name'] . ' settings · Brionic Report
       <h3><span class="cm-num">2</span> Any website (HTML) <?php if ($conn['snippet'] > 0): ?><span class="cm-badge">&#10003; Connected</span><?php endif; ?></h3>
       <p class="muted">Paste this once, just before the closing <code>&lt;/head&gt;</code> tag, on every page you want to track.<?php if ($hasSearchMeta): ?> This block also includes your <strong>Google/Bing verification</strong> &mdash; after pasting, click <strong>Verify</strong> under &ldquo;Search engines &amp; indexing&rdquo; below.<?php endif; ?></p>
       <code class="code"<?= $hasSearchMeta ? ' style="white-space:pre-wrap;display:block"' : '' ?>><?= e($pasteBlock) ?></code>
+      <?php if (!empty($sx['indexnow']) && (string) ($sx['indexnow_key'] ?? '') !== ''): ?>
+        <p class="muted" style="font-size:.82rem;margin:12px 0 0">
+          <strong>Instant indexing (IndexNow):</strong> also add one small text file so Bing/Yandex accept instant updates &mdash; create
+          <code>https://<?= e(\App\Services\SearchService::domain($site)) ?>/<?= e((string) $sx['indexnow_key']) ?>.txt</code>
+          containing exactly <code><?= e((string) $sx['indexnow_key']) ?></code>.
+          <em>WordPress sites get this automatically from the Brionic plugin &mdash; nothing to add.</em>
+        </p>
+      <?php endif; ?>
     </div>
 
     <div class="connect-method">

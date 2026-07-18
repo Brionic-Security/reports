@@ -91,6 +91,7 @@ final class SiteController
             'google_connected'  => \App\Services\GoogleOAuth::connected(),
             'bing_configured'   => \App\Services\BingWebmaster::configured(),
             'indexnow'          => \App\Services\IndexNow::configured(),
+            'indexnow_key'      => \App\Services\IndexNow::key(),
             'conn_google'       => \App\Models\SearchConnection::find($id, 'google'),
             'conn_bing'         => \App\Models\SearchConnection::find($id, 'bing'),
             'totals'            => \App\Models\SearchMetric::totals($id, $from, $to),
