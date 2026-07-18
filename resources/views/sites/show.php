@@ -130,6 +130,10 @@ $this->layout('layout', ['title' => $site['name'] . ' settings · Brionic Report
             <button class="btn btn-sm" type="submit">Disconnect</button>
           </form>
         </div>
+        <?php if ($cg['status'] !== 'verified' && ($cg['verification'] ?? '') === 'meta' && ($cg['verify_token'] ?? '') !== ''): ?>
+          <p class="muted" style="font-size:.8rem;margin:10px 0 4px">WordPress sites verify automatically (the Brionic plugin injects this within a few minutes). For any other site, paste this once into your <code>&lt;head&gt;</code>, then click Verify:</p>
+          <code class="code">&lt;meta name="google-site-verification" content="<?= e($cg['verify_token']) ?>"&gt;</code>
+        <?php endif; ?>
       <?php endif; ?>
     </div>
 

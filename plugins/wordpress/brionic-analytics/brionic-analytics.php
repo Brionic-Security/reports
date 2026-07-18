@@ -2,8 +2,8 @@
 /**
  * Plugin Name:       Brionic Config
  * Plugin URI:        https://reports.brionicsecurity.com
- * Description:       Brionic all-in-one WordPress config: analytics, SEO, email controls, automatic-update management, a branded login page, an under-construction mode, and cache tools — one plugin for your Brionic-managed site.
- * Version:           1.3.6
+ * Description:       Brionic all-in-one WordPress config: analytics, SEO, search-engine verification (Google Search Console + IndexNow), email controls, automatic-update management, a branded login page, an under-construction mode, and cache tools — one plugin for your Brionic-managed site.
+ * Version:           1.4.0
  * Author:            Brionic Security
  * Author URI:        https://brionicsecurity.com
  * License:           MIT
@@ -112,6 +112,72 @@ foreach (['sgo_js_minify_exclude', 'sgo_javascript_combine_exclude', 'sgo_js_asy
 function brionic_analytics_base() {
     return preg_replace('#/b\.js.*$#', '', BRIONIC_ANALYTICS_SRC);
 }
+
+/* ------------------------------------------------------------------ *
+ * Search-engine verification + IndexNow.
+ * Pulls this site's verification tokens from Brionic Reports so a site
+ * connected in the dashboard verifies itself with zero manual steps:
+ *   - injects the Google Search Console ownership <meta> tag, and
+ *   - serves the IndexNow key file at /{key}.txt (Bing/Yandex indexing).
+ * Tokens are cached in a transient so this adds no per-request overhead.
+ * ------------------------------------------------------------------ */
+
+/** Fetch (and cache) this site's search tags from Reports. */
+function brionic_search_tags() {
+    $empty = ['google_meta' => '', 'indexnow_key' => ''];
+    $key = brionic_analytics_key();
+    if (strncmp($key, 'site_', 5) !== 0) {
+        return $empty;
+    }
+    $cached = get_transient('brionic_search_tags');
+    if (is_array($cached)) {
+        return $cached;
+    }
+    $tags = $empty;
+    $url = brionic_analytics_base() . '/api/search-tags?key=' . rawurlencode($key);
+    $resp = wp_remote_get($url, ['timeout' => 12, 'headers' => ['Accept' => 'application/json']]);
+    if (is_wp_error($resp) || (int) wp_remote_retrieve_response_code($resp) !== 200) {
+        // Back off briefly on failure so we don't hammer the API.
+        set_transient('brionic_search_tags', $tags, 30 * MINUTE_IN_SECONDS);
+        return $tags;
+    }
+    $body = json_decode(wp_remote_retrieve_body($resp), true);
+    if (is_array($body) && !empty($body['ok'])) {
+        $tags['google_meta']  = isset($body['google_meta']) ? (string) $body['google_meta'] : '';
+        $tags['indexnow_key'] = isset($body['indexnow_key']) ? (string) $body['indexnow_key'] : '';
+    }
+    // Cache a real result for longer; cache an "empty" (not yet connected)
+    // result briefly so newly-connected sites pick up their token quickly.
+    $hasTokens = $tags['google_meta'] !== '' || $tags['indexnow_key'] !== '';
+    set_transient('brionic_search_tags', $tags, $hasTokens ? 6 * HOUR_IN_SECONDS : 20 * MINUTE_IN_SECONDS);
+    return $tags;
+}
+
+/** Inject the Google Search Console ownership meta tag into <head>. */
+add_action('wp_head', function () {
+    if (is_admin()) {
+        return;
+    }
+    $tags = brionic_search_tags();
+    if (!empty($tags['google_meta'])) {
+        printf('<meta name="google-site-verification" content="%s">' . "\n", esc_attr($tags['google_meta']));
+    }
+}, 1);
+
+/** Serve the IndexNow key file at /{key}.txt (root-level), for Bing/Yandex. */
+add_action('template_redirect', function () {
+    $path = trim((string) parse_url((string) ($_SERVER['REQUEST_URI'] ?? ''), PHP_URL_PATH), '/');
+    if (!preg_match('#^([a-f0-9]{8,64})\.txt$#i', $path, $m)) {
+        return;
+    }
+    $tags = brionic_search_tags();
+    $key = (string) $tags['indexnow_key'];
+    if ($key !== '' && hash_equals($key, $m[1])) {
+        header('Content-Type: text/plain; charset=utf-8');
+        echo $key;
+        exit;
+    }
+});
 
 /** Server-side connection test against the Reports /api/verify endpoint. */
 function brionic_analytics_test_connection() {

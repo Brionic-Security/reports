@@ -173,7 +173,8 @@ final class SearchController
      */
     public function siteTags(Request $request): Response
     {
-        $publicId = (string) $request->query('site', '');
+        // Accept ?key= (used by the WP plugin, matching /api/verify) or ?site=.
+        $publicId = (string) $request->query('key', $request->query('site', ''));
         $site = $publicId !== '' ? Site::findByPublicId($publicId) : null;
         if ($site === null) {
             return Response::json(['ok' => false], 404);
