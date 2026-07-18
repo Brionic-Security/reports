@@ -29,6 +29,16 @@ foreach ($argv as $arg) {
 
 $stamp = gmdate('c');
 
+// Auto-verify any pending connections first, so newly connected sites become
+// verified automatically once their verification tag is live.
+try {
+    foreach (SearchService::autoVerifyPending() as $line) {
+        echo "{$stamp} — {$line}\n";
+    }
+} catch (\Throwable $e) {
+    echo "{$stamp} — auto-verify: ERROR " . $e->getMessage() . "\n";
+}
+
 // Collect distinct site ids that have any verified connection.
 $ids = [];
 foreach (['google', 'bing'] as $provider) {

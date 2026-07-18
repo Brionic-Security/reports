@@ -139,7 +139,8 @@ $this->layout('layout', ['title' => $site['name'] . ' settings · Brionic Report
         <div style="display:flex;gap:8px;flex-wrap:wrap">
           <?php if ($cg['status'] !== 'verified'): ?>
             <form method="post" action="<?= app_url('sites/' . $site['id'] . '/search/verify') ?>" style="margin:0">
-              <?= csrf_field() ?><button class="btn btn-primary btn-sm" type="submit">&#8635; Verify</button>
+              <?= csrf_field() ?><input type="hidden" name="provider" value="google">
+              <button class="btn btn-primary btn-sm" type="submit">&#8635; Verify</button>
             </form>
           <?php endif; ?>
           <form method="post" action="<?= app_url('sites/' . $site['id'] . '/search/disconnect') ?>" style="margin:0">
@@ -166,10 +167,18 @@ $this->layout('layout', ['title' => $site['name'] . ' settings · Brionic Report
         </form>
       <?php else: ?>
         <p class="muted" style="font-size:.82rem">Site <code><?= e($cb['property']) ?></code> &middot; <?= e($cb['detail']) ?></p>
-        <form method="post" action="<?= app_url('sites/' . $site['id'] . '/search/disconnect') ?>" style="margin:0">
-          <?= csrf_field() ?><input type="hidden" name="provider" value="bing">
-          <button class="btn btn-sm" type="submit">Disconnect</button>
-        </form>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <?php if ($cb['status'] !== 'verified'): ?>
+            <form method="post" action="<?= app_url('sites/' . $site['id'] . '/search/verify') ?>" style="margin:0">
+              <?= csrf_field() ?><input type="hidden" name="provider" value="bing">
+              <button class="btn btn-primary btn-sm" type="submit">&#8635; Verify</button>
+            </form>
+          <?php endif; ?>
+          <form method="post" action="<?= app_url('sites/' . $site['id'] . '/search/disconnect') ?>" style="margin:0">
+            <?= csrf_field() ?><input type="hidden" name="provider" value="bing">
+            <button class="btn btn-sm" type="submit">Disconnect</button>
+          </form>
+        </div>
       <?php endif; ?>
     </div>
   </div>

@@ -112,7 +112,10 @@ final class SearchController
     public function verify(Request $request, array $params): Response
     {
         $site = $this->site($params);
-        $res = SearchService::verifyGoogle($site);
+        $provider = (string) $request->input('provider', 'google');
+        $res = $provider === 'bing'
+            ? SearchService::verifyBing($site)
+            : SearchService::verifyGoogle($site);
         Session::flash($res['ok'] ? 'ok' : 'error', $res['message']);
         return Response::redirect(app_url('sites/' . $site['id'] . '/settings#search'));
     }

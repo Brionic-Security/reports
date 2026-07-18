@@ -54,6 +54,26 @@ final class BingWebmaster
     }
 
     /**
+     * Ask Bing to verify ownership of a site that has been added. Bing reads
+     * the msvalidate.01 meta tag (or BingSiteAuth.xml / CNAME) already present
+     * on the site. Returns verified=true once ownership is confirmed.
+     *
+     * @return array{ok:bool,verified:bool,error:string}
+     */
+    public static function verifySite(string $siteUrl): array
+    {
+        if (!self::configured()) {
+            return ['ok' => false, 'verified' => false, 'error' => 'Bing not configured'];
+        }
+        $res = Http::postJson(self::url('VerifySite'), ['siteUrl' => $siteUrl]);
+        if (!$res['ok']) {
+            return ['ok' => false, 'verified' => false, 'error' => $res['error'] ?: 'verify failed'];
+        }
+        $verified = is_array($res['json']) && !empty($res['json']['d']);
+        return ['ok' => true, 'verified' => $verified, 'error' => ''];
+    }
+
+    /**
      * Submit one or more URLs for crawling/indexing (Bing supports this
      * natively, unlike Google).
      *

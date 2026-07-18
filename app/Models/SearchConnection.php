@@ -39,6 +39,17 @@ final class SearchConnection
         );
     }
 
+    /** All not-yet-verified connections for a provider (used by auto-verify). */
+    public static function pending(string $provider): array
+    {
+        return Database::select(
+            "SELECT c.*, s.domain, s.name FROM site_search_connections c
+             JOIN sites s ON s.id = c.site_id
+             WHERE c.provider = ? AND c.status <> 'verified'",
+            [$provider]
+        );
+    }
+
     /**
      * Create or replace a connection row for a (site, provider).
      */

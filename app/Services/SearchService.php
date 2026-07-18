@@ -139,7 +139,7 @@ final class SearchService
         $add = BingWebmaster::addSite($siteUrl);
 
         // Pull the site's Bing ownership (msvalidate.01) code so the plugin/HTML
-        // can inject it — Bing then auto-verifies when it crawls the tag.
+        // can inject it — Bing then verifies when it reads the tag.
         $authCode = '';
         $list = BingWebmaster::getSites();
         if ($list['ok']) {
@@ -152,19 +152,90 @@ final class SearchService
             }
         }
 
+        // Auto-verify ownership now (Bing reads the msvalidate meta served by the
+        // WP plugin / site HTML). If the tag isn't live yet this stays pending
+        // and the daily cron retries automatically — no manual step needed.
+        $verified = false;
+        if ($add['ok']) {
+            $vr = BingWebmaster::verifySite($siteUrl);
+            $verified = $vr['ok'] && $vr['verified'];
+        }
+
         SearchConnection::upsert($siteId, 'bing', [
             'property'      => $siteUrl,
             'property_type' => 'url',
             'verification'  => 'meta',
             'verify_token'  => $authCode,
-            'status'        => $add['ok'] ? 'verified' : 'pending',
-            'detail'        => $add['ok']
-                ? 'Added to Bing. Indexing via IndexNow; ownership meta ready.'
-                : ('Bing add-site: ' . $add['error']),
+            'status'        => $verified ? 'verified' : 'pending',
+            'verified_at'   => $verified ? now() : '',
+            'detail'        => !$add['ok']
+                ? ('Bing add-site: ' . $add['error'])
+                : ($verified
+                    ? 'Verified — direct URL submission + stats enabled.'
+                    : 'Added to Bing. Indexing via IndexNow now; ownership auto-verifies once the msvalidate meta is live (WP plugin serves it; re-checked daily).'),
         ]);
-        return $add['ok']
-            ? ['ok' => true, 'status' => 'verified', 'message' => 'Bing connected. Indexing enabled via IndexNow.']
-            : ['ok' => false, 'status' => 'pending', 'message' => 'Bing: ' . $add['error']];
+        if (!$add['ok']) {
+            return ['ok' => false, 'status' => 'pending', 'message' => 'Bing: ' . $add['error']];
+        }
+        return $verified
+            ? ['ok' => true, 'status' => 'verified', 'message' => 'Bing connected and verified — direct submission + stats enabled.']
+            : ['ok' => true, 'status' => 'pending', 'message' => 'Bing connected. Indexing works now via IndexNow; ownership will auto-verify once the meta tag is live (re-checked daily).'];
+    }
+
+    /** Re-attempt Bing ownership verification for an existing connection. */
+    public static function verifyBing(array $site): array
+    {
+        if (!BingWebmaster::configured()) {
+            return ['ok' => false, 'status' => 'error', 'message' => 'Add a Bing Webmaster API key first (Integrations).'];
+        }
+        $conn = SearchConnection::find((int) $site['id'], 'bing');
+        if ($conn === null) {
+            return ['ok' => false, 'status' => 'error', 'message' => 'Not connected to Bing yet.'];
+        }
+        $vr = BingWebmaster::verifySite((string) $conn['property']);
+        $verified = $vr['ok'] && $vr['verified'];
+        SearchConnection::setStatus(
+            (int) $site['id'],
+            'bing',
+            $verified ? 'verified' : 'pending',
+            $verified
+                ? 'Verified — direct URL submission + stats enabled.'
+                : ('Not verified yet' . ($vr['error'] !== '' ? ': ' . $vr['error'] : ' — make sure the msvalidate meta tag is live on your site, then retry.'))
+        );
+        return $verified
+            ? ['ok' => true, 'status' => 'verified', 'message' => 'Bing ownership verified — direct submission + stats enabled.']
+            : ['ok' => false, 'status' => 'pending', 'message' => 'Bing not verified yet — ensure the meta tag is live on your site (the WP plugin serves it), then Verify.'];
+    }
+
+    /**
+     * Retry ownership verification for every pending connection (both engines).
+     * Called by the daily cron so a site verifies automatically once its
+     * verification tag is live — no manual step after connecting.
+     *
+     * @return array<int,string>  lines describing sites that became verified
+     */
+    public static function autoVerifyPending(): array
+    {
+        $out = [];
+        foreach (['google', 'bing'] as $provider) {
+            foreach (SearchConnection::pending($provider) as $conn) {
+                $site = Site::find((int) $conn['site_id']);
+                if ($site === null) {
+                    continue;
+                }
+                try {
+                    $res = $provider === 'google'
+                        ? self::verifyGoogle($site)
+                        : self::verifyBing($site);
+                    if (($res['status'] ?? '') === 'verified') {
+                        $out[] = ucfirst($provider) . ': ' . ($site['name'] ?? ('site ' . $conn['site_id'])) . ' verified.';
+                    }
+                } catch (\Throwable $e) {
+                    // best-effort; the next run retries.
+                }
+            }
+        }
+        return $out;
     }
 
     /**
