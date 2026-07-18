@@ -137,14 +137,29 @@ final class SearchService
         $siteId = (int) $site['id'];
         $siteUrl = self::homeUrl($site);
         $add = BingWebmaster::addSite($siteUrl);
+
+        // Pull the site's Bing ownership (msvalidate.01) code so the plugin/HTML
+        // can inject it — Bing then auto-verifies when it crawls the tag.
+        $authCode = '';
+        $list = BingWebmaster::getSites();
+        if ($list['ok']) {
+            $want = rtrim($siteUrl, '/');
+            foreach ($list['sites'] as $s) {
+                if (is_array($s) && rtrim((string) ($s['Url'] ?? ''), '/') === $want) {
+                    $authCode = (string) ($s['AuthenticationCode'] ?? '');
+                    break;
+                }
+            }
+        }
+
         SearchConnection::upsert($siteId, 'bing', [
             'property'      => $siteUrl,
             'property_type' => 'url',
-            'verification'  => 'indexnow',
-            'verify_token'  => IndexNow::key(),
+            'verification'  => 'meta',
+            'verify_token'  => $authCode,
             'status'        => $add['ok'] ? 'verified' : 'pending',
             'detail'        => $add['ok']
-                ? 'Added to Bing. Indexing enabled via IndexNow.'
+                ? 'Added to Bing. Indexing via IndexNow; ownership meta ready.'
                 : ('Bing add-site: ' . $add['error']),
         ]);
         return $add['ok']
@@ -313,8 +328,16 @@ final class SearchService
     {
         $g = SearchConnection::find((int) $site['id'], 'google');
         $googleMeta = ($g !== null && $g['verification'] === 'meta') ? (string) $g['verify_token'] : '';
+
+        $b = SearchConnection::find((int) $site['id'], 'bing');
+        $bingCode = ($b !== null) ? (string) ($b['verify_token'] ?? '') : '';
+        $bingMeta = $bingCode !== ''
+            ? '<meta name="msvalidate.01" content="' . htmlspecialchars($bingCode, ENT_QUOTES) . '" />'
+            : '';
+
         return [
             'google_meta'  => $googleMeta,
+            'bing_meta'    => $bingMeta,
             'indexnow_key' => IndexNow::key(),
         ];
     }

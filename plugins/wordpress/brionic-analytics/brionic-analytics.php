@@ -3,7 +3,7 @@
  * Plugin Name:       Brionic Config
  * Plugin URI:        https://reports.brionicsecurity.com
  * Description:       Brionic all-in-one WordPress config: analytics, SEO, search-engine verification (Google Search Console + IndexNow), email controls, automatic-update management, a branded login page, an under-construction mode, and cache tools — one plugin for your Brionic-managed site.
- * Version:           1.4.0
+ * Version:           1.4.1
  * Author:            Brionic Security
  * Author URI:        https://brionicsecurity.com
  * License:           MIT
@@ -124,14 +124,14 @@ function brionic_analytics_base() {
 
 /** Fetch (and cache) this site's search tags from Reports. */
 function brionic_search_tags() {
-    $empty = ['google_meta' => '', 'indexnow_key' => ''];
+    $empty = ['google_meta' => '', 'bing_meta' => '', 'indexnow_key' => ''];
     $key = brionic_analytics_key();
     if (strncmp($key, 'site_', 5) !== 0) {
         return $empty;
     }
     $cached = get_transient('brionic_search_tags');
     if (is_array($cached)) {
-        return $cached;
+        return array_merge($empty, $cached);
     }
     $tags = $empty;
     $url = brionic_analytics_base() . '/api/search-tags?key=' . rawurlencode($key);
@@ -144,26 +144,27 @@ function brionic_search_tags() {
     $body = json_decode(wp_remote_retrieve_body($resp), true);
     if (is_array($body) && !empty($body['ok'])) {
         $tags['google_meta']  = isset($body['google_meta']) ? (string) $body['google_meta'] : '';
+        $tags['bing_meta']    = isset($body['bing_meta']) ? (string) $body['bing_meta'] : '';
         $tags['indexnow_key'] = isset($body['indexnow_key']) ? (string) $body['indexnow_key'] : '';
     }
     // Cache a real result for longer; cache an "empty" (not yet connected)
     // result briefly so newly-connected sites pick up their token quickly.
-    $hasTokens = $tags['google_meta'] !== '' || $tags['indexnow_key'] !== '';
+    $hasTokens = $tags['google_meta'] !== '' || $tags['bing_meta'] !== '' || $tags['indexnow_key'] !== '';
     set_transient('brionic_search_tags', $tags, $hasTokens ? 6 * HOUR_IN_SECONDS : 20 * MINUTE_IN_SECONDS);
     return $tags;
 }
 
-/** Inject the Google Search Console ownership meta tag into <head>. */
+/** Inject the Google + Bing ownership meta tags into <head>. */
 add_action('wp_head', function () {
     if (is_admin()) {
         return;
     }
     $tags = brionic_search_tags();
-    // The token from Google's Site Verification API (META method) is already a
-    // complete <meta name="google-site-verification" ...> tag — emit it as-is.
-    $meta = (string) $tags['google_meta'];
-    if ($meta !== '' && stripos($meta, '<meta') === 0) {
-        echo $meta . "\n";
+    // Both tokens arrive as complete <meta ...> tags — emit each as-is.
+    foreach ([(string) ($tags['google_meta'] ?? ''), (string) ($tags['bing_meta'] ?? '')] as $meta) {
+        if ($meta !== '' && stripos($meta, '<meta') === 0) {
+            echo $meta . "\n";
+        }
     }
 }, 1);
 

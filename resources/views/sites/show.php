@@ -130,10 +130,6 @@ $this->layout('layout', ['title' => $site['name'] . ' settings · Brionic Report
             <button class="btn btn-sm" type="submit">Disconnect</button>
           </form>
         </div>
-        <?php if ($cg['status'] !== 'verified' && ($cg['verification'] ?? '') === 'meta' && ($cg['verify_token'] ?? '') !== ''): ?>
-          <p class="muted" style="font-size:.8rem;margin:10px 0 4px">WordPress sites verify automatically (the Brionic plugin injects this within a few minutes). For any other site, paste this tag once into your <code>&lt;head&gt;</code>, then click Verify:</p>
-          <code class="code"><?= e($cg['verify_token']) ?></code>
-        <?php endif; ?>
       <?php endif; ?>
     </div>
 
@@ -160,6 +156,18 @@ $this->layout('layout', ['title' => $site['name'] . ' settings · Brionic Report
       <?php endif; ?>
     </div>
   </div>
+
+  <?php
+    $connectLines = [$snippet];
+    if ($cg && (($cg['verification'] ?? '') === 'meta') && ($cg['verify_token'] ?? '') !== '') { $connectLines[] = $cg['verify_token']; }
+    if ($cb && (($cb['verify_token'] ?? '') !== '')) { $connectLines[] = '<meta name="msvalidate.01" content="' . e($cb['verify_token']) . '" />'; }
+  ?>
+  <?php if (count($connectLines) > 1): ?>
+    <hr style="border:none;border-top:1px solid var(--line);margin:18px 0">
+    <h3 style="margin:0 0 6px">One-paste HTML &mdash; connects Reports + Google + Bing</h3>
+    <p class="muted" style="margin-top:0;font-size:.85rem"><strong>WordPress:</strong> the Brionic plugin adds all of this automatically &mdash; nothing to paste. <strong>Any other site:</strong> paste this block once, just before <code>&lt;/head&gt;</code>, on every page &mdash; then click Verify above.</p>
+    <code class="code" style="white-space:pre-wrap;display:block"><?= e(implode("\n", $connectLines)) ?></code>
+  <?php endif; ?>
 
   <?php if ($cg || $cb): ?>
   <hr style="border:none;border-top:1px solid var(--line);margin:18px 0">
