@@ -159,8 +159,11 @@ add_action('wp_head', function () {
         return;
     }
     $tags = brionic_search_tags();
-    if (!empty($tags['google_meta'])) {
-        printf('<meta name="google-site-verification" content="%s">' . "\n", esc_attr($tags['google_meta']));
+    // The token from Google's Site Verification API (META method) is already a
+    // complete <meta name="google-site-verification" ...> tag — emit it as-is.
+    $meta = (string) $tags['google_meta'];
+    if ($meta !== '' && stripos($meta, '<meta') === 0) {
+        echo $meta . "\n";
     }
 }, 1);
 
