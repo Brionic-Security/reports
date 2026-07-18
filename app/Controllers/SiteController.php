@@ -98,14 +98,25 @@ final class SiteController
             }
         }
 
+        $connGoogle = \App\Models\SearchConnection::find($id, 'google');
+        $connBing   = \App\Models\SearchConnection::find($id, 'bing');
+        // Pre-fill the "Request indexing" box with the site's own pages so the
+        // operator doesn't have to type them (only when a search engine is
+        // connected — avoids fetching the sitemap for unconnected sites).
+        $defaultUrls = '';
+        if ($connGoogle !== null || $connBing !== null) {
+            $defaultUrls = implode("\n", \App\Services\SearchService::defaultIndexUrls($site, 12));
+        }
+
         return [
             'google_configured' => \App\Services\GoogleOAuth::configured(),
             'google_connected'  => \App\Services\GoogleOAuth::connected(),
             'bing_configured'   => \App\Services\BingWebmaster::configured(),
             'indexnow'          => \App\Services\IndexNow::configured(),
             'indexnow_key'      => \App\Services\IndexNow::key(),
-            'conn_google'       => \App\Models\SearchConnection::find($id, 'google'),
-            'conn_bing'         => \App\Models\SearchConnection::find($id, 'bing'),
+            'conn_google'       => $connGoogle,
+            'conn_bing'         => $connBing,
+            'default_urls'      => $defaultUrls,
             'index_last'        => \App\Models\IndexRequest::latestByProvider($id),
             'google_processed'  => $googleProcessed,
             'totals'            => \App\Models\SearchMetric::totals($id, $from, $to),

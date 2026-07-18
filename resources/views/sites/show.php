@@ -201,10 +201,10 @@ $this->layout('layout', ['title' => $site['name'] . ' settings · Brionic Report
   <div class="grid">
     <div>
       <h3 style="margin:0 0 8px">Request indexing</h3>
-      <p class="muted" style="margin-top:0;font-size:.85rem">Submits your sitemap to Google and pushes URLs to Bing + IndexNow. Leave blank to submit the homepage. One URL or path per line.</p>
+      <p class="muted" style="margin-top:0;font-size:.85rem">Google always gets your full <code>sitemap.xml</code>. The pages below (pre-filled from your sitemap) are pushed to Bing + IndexNow &mdash; edit or add any, or clear the box to submit just the homepage. One URL or path per line.</p>
       <form method="post" action="<?= app_url('sites/' . $site['id'] . '/search/index') ?>">
         <?= csrf_field() ?>
-        <textarea class="input" name="urls" rows="3" placeholder="/&#10;/blog/new-post&#10;https://<?= e($site['domain']) ?>/pricing"></textarea>
+        <textarea class="input" name="urls" rows="6" placeholder="/&#10;/blog/new-post&#10;https://<?= e($site['domain']) ?>/pricing"><?= e($s['default_urls'] ?? '') ?></textarea>
         <button class="btn btn-primary btn-sm mt" type="submit">&#9889; Request indexing now</button>
       </form>
       <?php if (!empty($index_result)): ?>

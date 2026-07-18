@@ -33,6 +33,113 @@ final class SearchService
     }
 
     /**
+     * Default list of URLs to offer for indexing — the site's own pages, pulled
+     * from its sitemap (cached ~1h), falling back to pages seen in analytics,
+     * then the homepage. Homepage is always first. Capped so Bing's daily
+     * URL-submission quota stays comfortable; the operator can add more.
+     *
+     * @return string[]
+     */
+    public static function defaultIndexUrls(array $site, int $limit = 12): array
+    {
+        $home = self::homeUrl($site);
+        $urls = self::sitemapUrls($site, $limit);
+        if (count($urls) <= 1) {
+            foreach (self::analyticsUrls($site, $limit) as $u) {
+                $urls[] = $u;
+            }
+        }
+        $urls = array_values(array_unique(array_merge([$home], $urls)));
+        return array_slice($urls, 0, $limit);
+    }
+
+    /**
+     * Fetch + parse the site's sitemap.xml (handles a sitemap index). Cached to
+     * storage/cache for ~1h so settings-page loads stay fast. Best-effort.
+     *
+     * @return string[]
+     */
+    public static function sitemapUrls(array $site, int $limit = 50): array
+    {
+        $domain = self::domain($site);
+        $cacheFile = storage_path('cache/sitemap_' . preg_replace('/[^a-z0-9]+/i', '_', $domain) . '.json');
+        if (is_file($cacheFile) && (time() - (int) filemtime($cacheFile) < 3600)) {
+            $cached = json_decode((string) @file_get_contents($cacheFile), true);
+            if (is_array($cached)) {
+                return array_slice($cached, 0, $limit);
+            }
+        }
+        $urls = self::crawlSitemap('https://' . $domain . '/sitemap.xml', $limit, 0);
+        @file_put_contents($cacheFile, json_encode($urls));
+        return array_slice($urls, 0, $limit);
+    }
+
+    /** @return string[] */
+    private static function crawlSitemap(string $url, int $limit, int $depth): array
+    {
+        if ($depth > 2) {
+            return [];
+        }
+        $res = \App\Support\Http::get($url, [], 8, 5);
+        if (!$res['ok'] || (string) $res['body'] === '') {
+            return [];
+        }
+        $xml = @simplexml_load_string((string) $res['body']);
+        if ($xml === false) {
+            return [];
+        }
+        $out = [];
+        if (strtolower($xml->getName()) === 'sitemapindex') {
+            $seen = 0;
+            foreach ($xml->sitemap as $sm) {
+                $loc = trim((string) $sm->loc);
+                if ($loc === '') {
+                    continue;
+                }
+                foreach (self::crawlSitemap($loc, $limit, $depth + 1) as $u) {
+                    $out[] = $u;
+                }
+                if (count($out) >= $limit || ++$seen >= 5) {
+                    break;
+                }
+            }
+        } else {
+            foreach ($xml->url as $u) {
+                $loc = trim((string) $u->loc);
+                if ($loc !== '') {
+                    $out[] = $loc;
+                }
+                if (count($out) >= $limit) {
+                    break;
+                }
+            }
+        }
+        return $out;
+    }
+
+    /**
+     * Pages seen in our own analytics (fallback when the sitemap is missing).
+     *
+     * @return string[]
+     */
+    private static function analyticsUrls(array $site, int $limit = 12): array
+    {
+        $rows = \App\Support\Database::select(
+            "SELECT path, COUNT(*) n FROM events
+             WHERE site_id = ? AND is_bot = 0 AND type = 'pageview' AND path <> ''
+             GROUP BY path ORDER BY n DESC LIMIT " . (int) $limit,
+            [(int) $site['id']]
+        );
+        $base = 'https://' . self::domain($site);
+        $out = [];
+        foreach ($rows as $r) {
+            $p = (string) $r['path'];
+            $out[] = str_contains($p, '://') ? $p : ($base . '/' . ltrim($p, '/'));
+        }
+        return $out;
+    }
+
+    /**
      * Connect a site to Google Search Console. Prefers DNS-TXT (domain
      * property) via Cloudflare when the zone is in the operator's account;
      * otherwise sets up a URL-prefix property verified by a meta tag (served by

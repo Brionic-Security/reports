@@ -22,7 +22,8 @@ final class Http
         array|string|null $body = null,
         array $headers = [],
         string $type = 'json',
-        int $timeout = 20
+        int $timeout = 20,
+        int $connectTimeout = 12
     ): array {
         if (!function_exists('curl_init')) {
             return ['ok' => false, 'status' => 0, 'body' => '', 'json' => null, 'error' => 'curl unavailable'];
@@ -55,7 +56,7 @@ final class Http
             CURLOPT_FOLLOWLOCATION => true,
             CURLOPT_MAXREDIRS      => 5,
             CURLOPT_TIMEOUT        => $timeout,
-            CURLOPT_CONNECTTIMEOUT => 12,
+            CURLOPT_CONNECTTIMEOUT => $connectTimeout,
             CURLOPT_SSL_VERIFYPEER => true,
             CURLOPT_SSL_VERIFYHOST => 2,
             CURLOPT_HTTPHEADER     => $headerLines,
@@ -93,9 +94,9 @@ final class Http
     }
 
     /** @param array<string,string> $headers */
-    public static function get(string $url, array $headers = [], int $timeout = 20): array
+    public static function get(string $url, array $headers = [], int $timeout = 20, int $connectTimeout = 12): array
     {
-        return self::request('GET', $url, null, $headers, 'json', $timeout);
+        return self::request('GET', $url, null, $headers, 'json', $timeout, $connectTimeout);
     }
 
     /**
