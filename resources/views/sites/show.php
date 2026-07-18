@@ -225,7 +225,7 @@ $this->layout('layout', ['title' => $site['name'] . ' settings · Brionic Report
           <td><?= e(ucfirst($rq['provider'])) ?></td>
           <td><?= e($rq['kind']) ?></td>
           <td style="max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><?= e($rq['target']) ?></td>
-          <td><span class="badge <?= $rq['status'] === 'ok' ? 'human' : 'bot' ?>"><?= e($rq['status']) ?></span></td>
+          <td><span class="badge <?= $rq['status'] === 'ok' ? 'human' : ($rq['status'] === 'error' ? 'bot' : '') ?>"><?= e($rq['status']) ?></span></td>
           <td><?= e(time_ago($rq['created_at'])) ?></td>
         </tr>
       <?php endforeach; ?>

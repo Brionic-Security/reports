@@ -194,14 +194,21 @@ final class SearchService
                 : 'Google: sitemap failed — ' . $res['error'];
         }
 
-        // Bing — direct URL submission.
+        // Bing — direct URL submission. This API needs verified ownership in
+        // Bing Webmaster; if that isn't in place yet, IndexNow (below) still
+        // delivers the URLs to Bing, so treat NotAuthorized as informational.
         $b = SearchConnection::find($siteId, 'bing');
         if ($b !== null) {
             $res = BingWebmaster::submitUrls((string) $b['property'], $urls);
-            IndexRequest::log($siteId, 'bing', 'url', implode(' ', $urls), $res['ok'] ? 'ok' : 'error', $res['error']);
-            $out[] = $res['ok']
-                ? 'Bing: submitted ' . count($urls) . ' URL(s).'
-                : 'Bing: submit failed — ' . $res['error'];
+            $notVerified = !$res['ok'] && preg_match('/not\s*authoriz|unauthoriz|forbidden/i', $res['error']) === 1;
+            IndexRequest::log($siteId, 'bing', 'url', implode(' ', $urls), $res['ok'] ? 'ok' : ($notVerified ? 'skipped' : 'error'), $res['error']);
+            if ($res['ok']) {
+                $out[] = 'Bing: submitted ' . count($urls) . ' URL(s).';
+            } elseif ($notVerified) {
+                $out[] = 'Bing: delivered via IndexNow (verify ownership in Bing to also enable direct submission + stats).';
+            } else {
+                $out[] = 'Bing: submit failed — ' . $res['error'];
+            }
         }
 
         // IndexNow — instant ping (Bing/Yandex/etc).
