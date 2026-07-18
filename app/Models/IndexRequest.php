@@ -27,4 +27,35 @@ final class IndexRequest
             [$siteId]
         );
     }
+
+    /**
+     * Most recent request timestamp per provider (google|bing|indexnow).
+     *
+     * @return array<string,string>  provider => created_at
+     */
+    public static function latestByProvider(int $siteId): array
+    {
+        $rows = Database::select(
+            'SELECT provider, MAX(created_at) AS last_at FROM index_requests WHERE site_id = ? GROUP BY provider',
+            [$siteId]
+        );
+        $out = [];
+        foreach ($rows as $r) {
+            $out[(string) $r['provider']] = (string) $r['last_at'];
+        }
+        return $out;
+    }
+
+    /** Latest request row for a provider (optionally a specific kind). */
+    public static function latest(int $siteId, string $provider, ?string $kind = null): ?array
+    {
+        $sql = 'SELECT * FROM index_requests WHERE site_id = ? AND provider = ?';
+        $params = [$siteId, $provider];
+        if ($kind !== null) {
+            $sql .= ' AND kind = ?';
+            $params[] = $kind;
+        }
+        $sql .= ' ORDER BY id DESC LIMIT 1';
+        return Database::selectOne($sql, $params);
+    }
 }

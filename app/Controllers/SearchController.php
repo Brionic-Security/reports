@@ -132,7 +132,7 @@ final class SearchController
             }
         }
         $results = SearchService::requestIndexing($site, $urls);
-        Session::flash('ok', implode(' ', $results));
+        Session::flash('index_result', implode("\n", $results));
         return Response::redirect(app_url('sites/' . $site['id'] . '/settings#search'));
     }
 

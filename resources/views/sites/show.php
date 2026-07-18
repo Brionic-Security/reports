@@ -207,6 +207,29 @@ $this->layout('layout', ['title' => $site['name'] . ' settings · Brionic Report
         <textarea class="input" name="urls" rows="3" placeholder="/&#10;/blog/new-post&#10;https://<?= e($site['domain']) ?>/pricing"></textarea>
         <button class="btn btn-primary btn-sm mt" type="submit">&#9889; Request indexing now</button>
       </form>
+      <?php if (!empty($index_result)): ?>
+        <div class="flash" style="margin:10px 0 0;font-size:.82rem;white-space:pre-wrap"><?= e($index_result) ?></div>
+      <?php endif; ?>
+      <?php
+        $il = $s['index_last'] ?? [];
+        $lastAny = '';
+        foreach ($il as $ts) { if ((string) $ts > $lastAny) { $lastAny = (string) $ts; } }
+        $gp = $s['google_processed'] ?? null;
+      ?>
+      <?php if ($lastAny !== ''): ?>
+        <p class="muted" style="font-size:.8rem;margin:10px 0 4px">Last requested <strong><?= e(time_ago($lastAny)) ?></strong>.</p>
+        <ul class="muted" style="font-size:.8rem;margin:0;padding-left:16px;line-height:1.7">
+          <?php if (!empty($il['google'])): ?>
+            <li>Google &mdash; submitted <?= e(time_ago($il['google'])) ?><?php
+              if ($gp && !empty($gp['downloaded'])): ?> &middot; fetched by Google <?= e(time_ago($gp['downloaded'])) ?><?php if ((int) ($gp['errors'] ?? 0) > 0): ?> <span style="color:var(--danger)">(<?= (int) $gp['errors'] ?> errors)</span><?php endif;
+              elseif ($gp && !empty($gp['pending'])): ?> &middot; queued for crawl<?php endif; ?></li>
+          <?php endif; ?>
+          <?php if (!empty($il['bing'])): ?><li>Bing &mdash; submitted <?= e(time_ago($il['bing'])) ?></li><?php endif; ?>
+          <?php if (!empty($il['indexnow'])): ?><li>IndexNow &mdash; pinged <?= e(time_ago($il['indexnow'])) ?></li><?php endif; ?>
+        </ul>
+      <?php else: ?>
+        <p class="muted" style="font-size:.8rem;margin:10px 0 0">Not requested yet.</p>
+      <?php endif; ?>
     </div>
     <div>
       <h3 style="margin:0 0 8px">Search performance <span class="muted" style="font-weight:400;font-size:.8rem">(last 28 days)</span></h3>

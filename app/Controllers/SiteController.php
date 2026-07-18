@@ -71,6 +71,7 @@ final class SiteController
             'snippet'    => self::snippet((string) $site['public_id']),
             'ok'         => Session::getFlash('ok'),
             'error'      => Session::getFlash('error'),
+            'index_result' => Session::getFlash('index_result'),
             'runs'       => \App\Models\ReportRun::recentForSite((int) $site['id'], 6),
             'connection' => self::connectionStatus((int) $site['id']),
             'search'     => self::searchData($site),
@@ -86,6 +87,17 @@ final class SiteController
         $id = (int) $site['id'];
         $to = gmdate('Y-m-d');
         $from = gmdate('Y-m-d', time() - 28 * 86400);
+
+        // Stored Google sitemap processing status (captured at request time).
+        $googleProcessed = null;
+        $gRow = \App\Models\IndexRequest::latest($id, 'google', 'sitemap');
+        if ($gRow !== null && ($gRow['status'] ?? '') === 'ok' && (string) ($gRow['detail'] ?? '') !== '') {
+            $decoded = json_decode((string) $gRow['detail'], true);
+            if (is_array($decoded)) {
+                $googleProcessed = $decoded;
+            }
+        }
+
         return [
             'google_configured' => \App\Services\GoogleOAuth::configured(),
             'google_connected'  => \App\Services\GoogleOAuth::connected(),
@@ -94,6 +106,8 @@ final class SiteController
             'indexnow_key'      => \App\Services\IndexNow::key(),
             'conn_google'       => \App\Models\SearchConnection::find($id, 'google'),
             'conn_bing'         => \App\Models\SearchConnection::find($id, 'bing'),
+            'index_last'        => \App\Models\IndexRequest::latestByProvider($id),
+            'google_processed'  => $googleProcessed,
             'totals'            => \App\Models\SearchMetric::totals($id, $from, $to),
             'has_metrics'       => \App\Models\SearchMetric::hasAny($id),
             'top_queries'       => \App\Models\SearchMetric::top($id, 'query', $from, $to, null, 10),

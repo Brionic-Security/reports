@@ -259,9 +259,28 @@ final class SearchService
         if ($g !== null && $g['status'] === 'verified') {
             $sitemap = self::sitemapUrl($site);
             $res = GoogleSearchConsole::submitSitemap((string) $g['property'], $sitemap);
-            IndexRequest::log($siteId, 'google', 'sitemap', $sitemap, $res['ok'] ? 'ok' : 'error', $res['error']);
+            $detail = $res['ok'] ? '' : $res['error'];
+            $processed = '';
+            if ($res['ok']) {
+                $st = GoogleSearchConsole::sitemapStatus((string) $g['property'], $sitemap);
+                if ($st['ok']) {
+                    $detail = (string) json_encode([
+                        'downloaded' => $st['last_downloaded'],
+                        'submitted'  => $st['last_submitted'],
+                        'pending'    => $st['is_pending'],
+                        'warnings'   => $st['warnings'],
+                        'errors'     => $st['errors'],
+                    ]);
+                    if ($st['last_downloaded'] !== '') {
+                        $processed = ' Last fetched by Google ' . time_ago($st['last_downloaded']) . '.';
+                    } elseif ($st['is_pending']) {
+                        $processed = ' Google has queued it for crawling.';
+                    }
+                }
+            }
+            IndexRequest::log($siteId, 'google', 'sitemap', $sitemap, $res['ok'] ? 'ok' : 'error', $detail);
             $out[] = $res['ok']
-                ? 'Google: sitemap submitted (' . $sitemap . ').'
+                ? 'Google: sitemap submitted (' . $sitemap . ').' . $processed
                 : 'Google: sitemap failed — ' . $res['error'];
         }
 

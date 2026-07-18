@@ -109,6 +109,32 @@ final class GoogleSearchConsole
     }
 
     /**
+     * Status of a submitted sitemap — when Google last downloaded (processed)
+     * it, plus warning/error counts.
+     *
+     * @return array{ok:bool,last_downloaded:string,last_submitted:string,is_pending:bool,warnings:int,errors:int,error:string}
+     */
+    public static function sitemapStatus(string $property, string $sitemapUrl): array
+    {
+        $headers = self::authHeader();
+        if ($headers === []) {
+            return ['ok' => false, 'last_downloaded' => '', 'last_submitted' => '', 'is_pending' => false, 'warnings' => 0, 'errors' => 0, 'error' => 'Google not connected'];
+        }
+        $url = self::SC . '/sites/' . rawurlencode($property) . '/sitemaps/' . rawurlencode($sitemapUrl);
+        $res = Http::get($url, $headers);
+        $j = is_array($res['json']) ? $res['json'] : [];
+        return [
+            'ok'              => $res['ok'],
+            'last_downloaded' => (string) ($j['lastDownloaded'] ?? ''),
+            'last_submitted'  => (string) ($j['lastSubmitted'] ?? ''),
+            'is_pending'      => (bool) ($j['isPending'] ?? false),
+            'warnings'        => (int) ($j['warnings'] ?? 0),
+            'errors'          => (int) ($j['errors'] ?? 0),
+            'error'           => $res['ok'] ? '' : ($res['error'] ?: 'sitemap status failed'),
+        ];
+    }
+
+    /**
      * Query Search Analytics.
      *
      * @param string[] $dimensions e.g. ['date'] or ['query']
