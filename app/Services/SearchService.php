@@ -386,6 +386,61 @@ final class SearchService
     }
 
     /**
+     * Hands-free orchestration for the frequent cron: auto-CONNECT any site
+     * whose tracker is live (plugin installed) but isn't connected yet, then
+     * auto-VERIFY every pending connection. So once the plugin is on the site,
+     * Google + Bing get connected and verified with no dashboard clicks.
+     *
+     * @return array<int,string>
+     */
+    public static function autoManage(): array
+    {
+        $out = [];
+        $googleReady = GoogleOAuth::connected();
+        $bingReady   = BingWebmaster::configured();
+        if ($googleReady || $bingReady) {
+            foreach (Site::all() as $site) {
+                $id = (int) $site['id'];
+                $g = SearchConnection::find($id, 'google');
+                $b = SearchConnection::find($id, 'bing');
+                if (($g !== null || !$googleReady) && ($b !== null || !$bingReady)) {
+                    continue;
+                }
+                if (!self::trackerActive($id)) {
+                    continue; // only auto-connect sites the plugin/tracker is live on
+                }
+                if ($googleReady && $g === null) {
+                    try {
+                        self::connectGoogle($site);
+                        $out[] = 'Google auto-connected: ' . ($site['name'] ?? ('site ' . $id));
+                    } catch (\Throwable $e) {
+                    }
+                }
+                if ($bingReady && $b === null) {
+                    try {
+                        self::connectBing($site);
+                        $out[] = 'Bing auto-connected: ' . ($site['name'] ?? ('site ' . $id));
+                    } catch (\Throwable $e) {
+                    }
+                }
+            }
+        }
+        foreach (self::autoVerifyPending() as $line) {
+            $out[] = $line;
+        }
+        return $out;
+    }
+
+    /** True when we've received at least one tracker event for the site. */
+    private static function trackerActive(int $siteId): bool
+    {
+        return \App\Support\Database::selectOne(
+            'SELECT 1 AS x FROM events WHERE site_id = ? LIMIT 1',
+            [$siteId]
+        ) !== null;
+    }
+
+    /**
      * Request (re)indexing across connected engines. Google = submit sitemap;
      * Bing = submit the URLs + IndexNow ping.
      *
@@ -583,6 +638,8 @@ final class SearchService
             'google_meta'  => $googleMeta,
             'bing_meta'    => $bingMeta,
             'indexnow_key' => IndexNow::key(),
+            'google_verified' => $g !== null && ($g['status'] ?? '') === 'verified',
+            'bing_verified'   => $b !== null && ($b['status'] ?? '') === 'verified',
         ];
     }
 }

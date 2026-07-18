@@ -3,7 +3,7 @@
  * Plugin Name:       Brionic Config
  * Plugin URI:        https://reports.brionicsecurity.com
  * Description:       Brionic all-in-one WordPress config: analytics, SEO, search-engine verification (Google Search Console + IndexNow), email controls, automatic-update management, a branded login page, an under-construction mode, and cache tools — one plugin for your Brionic-managed site.
- * Version:           1.4.1
+ * Version:           1.5.0
  * Author:            Brionic Security
  * Author URI:        https://brionicsecurity.com
  * License:           MIT
@@ -44,6 +44,9 @@ register_activation_hook(__FILE__, function () {
         && strncmp(BRIONIC_ANALYTICS_DEFAULT_KEY, 'site_', 5) === 0) {
         update_option('brionic_analytics_site_key', BRIONIC_ANALYTICS_DEFAULT_KEY);
     }
+    // Drop any cached search tags so an updated/just-activated plugin fetches
+    // fresh verification tokens from Reports immediately (no stale-empty wait).
+    delete_transient('brionic_search_tags');
 });
 
 /** Inject the tracker into the <head> of every front-end page. */
@@ -150,7 +153,7 @@ function brionic_search_tags() {
     // Cache a real result for longer; cache an "empty" (not yet connected)
     // result briefly so newly-connected sites pick up their token quickly.
     $hasTokens = $tags['google_meta'] !== '' || $tags['bing_meta'] !== '' || $tags['indexnow_key'] !== '';
-    set_transient('brionic_search_tags', $tags, $hasTokens ? 6 * HOUR_IN_SECONDS : 20 * MINUTE_IN_SECONDS);
+    set_transient('brionic_search_tags', $tags, $hasTokens ? 6 * HOUR_IN_SECONDS : 5 * MINUTE_IN_SECONDS);
     return $tags;
 }
 
