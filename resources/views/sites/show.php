@@ -15,8 +15,25 @@ $this->layout('layout', ['title' => $site['name'] . ' settings · Brionic Report
 <?php if (!empty($ok)): ?><div class="flash"><?= e($ok) ?></div><?php endif; ?>
 <?php if (!empty($error)): ?><div class="flash err"><?= e($error) ?></div><?php endif; ?>
 
+<?php
+  // Single source of truth for the paste-in code block: the tracker plus any
+  // search-engine verification metas. Auto-updates as Google/Bing get connected.
+  $sx  = $search ?? [];
+  $cgx = $sx['conn_google'] ?? null;
+  $cbx = $sx['conn_bing'] ?? null;
+  $connectLines = [$snippet];
+  if ($cgx && (($cgx['verification'] ?? '') === 'meta') && ($cgx['verify_token'] ?? '') !== '') {
+      $connectLines[] = $cgx['verify_token'];
+  }
+  if ($cbx && (($cbx['verify_token'] ?? '') !== '')) {
+      $connectLines[] = '<meta name="msvalidate.01" content="' . $cbx['verify_token'] . '" />';
+  }
+  $pasteBlock    = implode("\n", $connectLines);
+  $hasSearchMeta = count($connectLines) > 1;
+?>
+
 <div class="grid">
-  <div class="card">
+  <div class="card" id="connect">
     <h2>Connect this website</h2>
     <?php $conn = $connection ?? ['any' => false, 'wordpress' => 0, 'snippet' => 0, 'last' => null]; ?>
     <?php if ($conn['any']): ?>
@@ -54,8 +71,8 @@ $this->layout('layout', ['title' => $site['name'] . ' settings · Brionic Report
 
     <div class="connect-method <?= $conn['snippet'] > 0 ? 'is-connected' : '' ?>">
       <h3><span class="cm-num">2</span> Any website (HTML) <?php if ($conn['snippet'] > 0): ?><span class="cm-badge">&#10003; Connected</span><?php endif; ?></h3>
-      <p class="muted">Paste this once, just before the closing <code>&lt;/head&gt;</code> tag, on every page you want to track.</p>
-      <code class="code"><?= e($snippet) ?></code>
+      <p class="muted">Paste this once, just before the closing <code>&lt;/head&gt;</code> tag, on every page you want to track.<?php if ($hasSearchMeta): ?> This block also includes your <strong>Google/Bing verification</strong> &mdash; after pasting, click <strong>Verify</strong> under &ldquo;Search engines &amp; indexing&rdquo; below.<?php endif; ?></p>
+      <code class="code"<?= $hasSearchMeta ? ' style="white-space:pre-wrap;display:block"' : '' ?>><?= e($pasteBlock) ?></code>
     </div>
 
     <div class="connect-method">
@@ -157,16 +174,9 @@ $this->layout('layout', ['title' => $site['name'] . ' settings · Brionic Report
     </div>
   </div>
 
-  <?php
-    $connectLines = [$snippet];
-    if ($cg && (($cg['verification'] ?? '') === 'meta') && ($cg['verify_token'] ?? '') !== '') { $connectLines[] = $cg['verify_token']; }
-    if ($cb && (($cb['verify_token'] ?? '') !== '')) { $connectLines[] = '<meta name="msvalidate.01" content="' . e($cb['verify_token']) . '" />'; }
-  ?>
-  <?php if (count($connectLines) > 1): ?>
+  <?php if ($hasSearchMeta): ?>
     <hr style="border:none;border-top:1px solid var(--line);margin:18px 0">
-    <h3 style="margin:0 0 6px">One-paste HTML &mdash; connects Reports + Google + Bing</h3>
-    <p class="muted" style="margin-top:0;font-size:.85rem"><strong>WordPress:</strong> the Brionic plugin adds all of this automatically &mdash; nothing to paste. <strong>Any other site:</strong> paste this block once, just before <code>&lt;/head&gt;</code>, on every page &mdash; then click Verify above.</p>
-    <code class="code" style="white-space:pre-wrap;display:block"><?= e(implode("\n", $connectLines)) ?></code>
+    <p class="muted" style="margin:0;font-size:.85rem"><strong>&#10003; Verification tag ready.</strong> It&rsquo;s already included in the paste block under <a href="#connect">Connect this website</a> above &mdash; <strong>WordPress</strong> sites get it automatically via the Brionic plugin; any other site pastes that one block once, then clicks <strong>Verify</strong>.</p>
   <?php endif; ?>
 
   <?php if ($cg || $cb): ?>
