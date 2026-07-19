@@ -212,7 +212,7 @@ $this->layout('layout', ['title' => $site['name'] . ' settings · Brionic Report
   <div class="grid">
     <div>
       <h3 style="margin:0 0 8px">Request indexing</h3>
-      <p class="muted" style="margin-top:0;font-size:.85rem">Google always gets your full sitemap. The pages below (pre-filled from your sitemap) are pushed to Bing + IndexNow &mdash; add or remove any, or clear them to submit just the homepage.</p>
+      <p class="muted" style="margin-top:0;font-size:.85rem">Google always gets your full sitemap. The pages below are pushed to Bing + IndexNow &mdash; add or remove any and <strong>your list is saved</strong>. Clear it to submit just the homepage.</p>
       <form method="post" action="<?= app_url('sites/' . $site['id'] . '/search/index') ?>">
         <?= csrf_field() ?>
         <div class="recip" data-chips data-chip-kind="url" data-chip-empty="No pages added — the homepage will be submitted.">
@@ -224,6 +224,10 @@ $this->layout('layout', ['title' => $site['name'] . ' settings · Brionic Report
           <textarea class="input recip-fallback" name="urls" rows="4" data-chip-data placeholder="/&#10;/blog/new-post"><?= e($s['default_urls'] ?? '') ?></textarea>
         </div>
         <button class="btn btn-primary btn-sm mt" type="submit">&#9889; Request indexing now</button>
+      </form>
+      <form method="post" action="<?= app_url('sites/' . $site['id'] . '/search/reset-index') ?>" style="margin:6px 0 0">
+        <?= csrf_field() ?>
+        <button class="btn btn-sm" type="submit" style="font-size:.78rem">&#8635; Reset to sitemap pages</button>
       </form>
       <?php if (!empty($index_result)): ?>
         <div class="flash" style="margin:10px 0 0;font-size:.82rem;white-space:pre-wrap"><?= e($index_result) ?></div>

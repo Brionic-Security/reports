@@ -54,6 +54,12 @@ final class Site
         );
     }
 
+    /** Remembered list of URLs the operator wants (re)indexed (newline-joined; null = use sitemap default). */
+    public static function updateIndexUrls(int $id, ?string $urls): void
+    {
+        Database::run('UPDATE sites SET index_urls = ? WHERE id = ?', [$urls, $id]);
+    }
+
     public static function delete(int $id): void
     {
         Database::transaction(function () use ($id) {

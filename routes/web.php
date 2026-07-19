@@ -76,6 +76,7 @@ return function (Router $router): void {
         $r->post('/sites/{id}/search/connect', [SearchController::class, 'connect'], ['csrf']);
         $r->post('/sites/{id}/search/verify', [SearchController::class, 'verify'], ['csrf']);
         $r->post('/sites/{id}/search/index', [SearchController::class, 'index'], ['csrf']);
+        $r->post('/sites/{id}/search/reset-index', [SearchController::class, 'resetIndexUrls'], ['csrf']);
         $r->post('/sites/{id}/search/sync', [SearchController::class, 'sync'], ['csrf']);
         $r->post('/sites/{id}/search/disconnect', [SearchController::class, 'disconnect'], ['csrf']);
     });

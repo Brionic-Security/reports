@@ -536,7 +536,9 @@ final class SearchService
         if ($g !== null && $g['status'] === 'verified' && GoogleOAuth::connected()) {
             $property = (string) $g['property'];
             $n = 0;
+            $gErr = '';
             $byDate = GoogleSearchConsole::searchAnalytics($property, $start, $end, ['date'], 500);
+            if (!$byDate['ok']) { $gErr = (string) $byDate['error']; }
             if ($byDate['ok']) {
                 foreach ($byDate['rows'] as $row) {
                     $day = (string) ($row['keys'][0] ?? '');
@@ -564,13 +566,18 @@ final class SearchService
                 }
             }
             SearchConnection::markSynced((int) $g['id']);
-            $out[] = 'Google: ' . $n . ' day(s) synced.';
+            $out[] = $gErr !== ''
+                ? 'Google: sync failed — ' . $gErr
+                : ($n > 0
+                    ? 'Google: ' . $n . ' day(s) synced.'
+                    : 'Google: no data yet — Search Console lags ~2 days and only shows data once the site gets search impressions.');
         }
 
         $b = SearchConnection::find($siteId, 'bing');
         if ($b !== null && BingWebmaster::configured()) {
             $siteUrl = (string) $b['property'];
             $traffic = BingWebmaster::trafficStats($siteUrl);
+            $bErr = $traffic['ok'] ? '' : (string) $traffic['error'];
             $n = 0;
             if ($traffic['ok']) {
                 foreach ($traffic['rows'] as $row) {
@@ -597,7 +604,11 @@ final class SearchService
                 }
             }
             SearchConnection::markSynced((int) $b['id']);
-            $out[] = 'Bing: ' . $n . ' day(s) synced.';
+            $out[] = $bErr !== ''
+                ? 'Bing: sync failed — ' . $bErr
+                : ($n > 0
+                    ? 'Bing: ' . $n . ' day(s) synced.'
+                    : 'Bing: no data yet (needs verified ownership in Bing + search impressions).');
         }
 
         if ($out === []) {

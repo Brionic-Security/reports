@@ -105,7 +105,11 @@ final class SiteController
         // connected — avoids fetching the sitemap for unconnected sites).
         $defaultUrls = '';
         if ($connGoogle !== null || $connBing !== null) {
-            $defaultUrls = implode("\n", \App\Services\SearchService::defaultIndexUrls($site, 12));
+            // Prefer the operator's saved/edited list; fall back to the sitemap.
+            $saved = $site['index_urls'] ?? null;
+            $defaultUrls = $saved !== null
+                ? (string) $saved
+                : implode("\n", \App\Services\SearchService::defaultIndexUrls($site, 12));
         }
 
         return [

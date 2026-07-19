@@ -124,6 +124,9 @@ final class SearchController
     {
         $site = $this->site($params);
         $urlsRaw = trim((string) $request->input('urls', ''));
+        // Remember the operator's edited list so removals/additions persist
+        // across reloads (otherwise the sitemap pre-fill re-adds them).
+        \App\Models\Site::updateIndexUrls((int) $site['id'], $urlsRaw);
         $urls = [];
         foreach (preg_split('/\s+/', $urlsRaw) ?: [] as $u) {
             $u = trim($u);
@@ -133,6 +136,15 @@ final class SearchController
         }
         $results = SearchService::requestIndexing($site, $urls);
         Session::flash('index_result', implode("\n", $results));
+        return Response::redirect(app_url('sites/' . $site['id'] . '/settings#search'));
+    }
+
+    /** Clear the saved URL list so the box repopulates from the sitemap. */
+    public function resetIndexUrls(Request $request, array $params): Response
+    {
+        $site = $this->site($params);
+        \App\Models\Site::updateIndexUrls((int) $site['id'], null);
+        Session::flash('ok', 'Reset to your sitemap pages.');
         return Response::redirect(app_url('sites/' . $site['id'] . '/settings#search'));
     }
 
