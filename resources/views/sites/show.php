@@ -286,7 +286,12 @@ $this->layout('layout', ['title' => $site['name'] . ' settings · Brionic Report
         <tr>
           <td><?= e(ucfirst($rq['provider'])) ?></td>
           <td><?= e($rq['kind']) ?></td>
-          <td style="max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><?= e($rq['target']) ?></td>
+          <td style="max-width:360px">
+            <?php foreach (preg_split('/\s+/', trim((string) $rq['target'])) ?: [] as $t): ?>
+              <?php if ($t === '') { continue; } ?>
+              <div title="<?= e($t) ?>" style="max-width:360px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><?= e($t) ?></div>
+            <?php endforeach; ?>
+          </td>
           <td><span class="badge <?= $rq['status'] === 'ok' ? 'human' : ($rq['status'] === 'error' ? 'bot' : '') ?>"><?= e($rq['status']) ?></span></td>
           <td><?= e(time_ago($rq['created_at'])) ?></td>
         </tr>
