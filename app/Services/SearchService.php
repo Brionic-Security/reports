@@ -341,17 +341,20 @@ final class SearchService
         }
         $vr = BingWebmaster::verifySite((string) $conn['property']);
         $verified = $vr['ok'] && $vr['verified'];
-        SearchConnection::setStatus(
-            (int) $site['id'],
-            'bing',
-            $verified ? 'verified' : 'pending',
-            $verified
-                ? 'Verified — direct URL submission + stats enabled.'
-                : ('Not verified yet' . ($vr['error'] !== '' ? ': ' . $vr['error'] : ' — make sure the msvalidate meta tag is live on your site, then retry.'))
-        );
-        return $verified
-            ? ['ok' => true, 'status' => 'verified', 'message' => 'Bing ownership verified — direct submission + stats enabled.']
-            : ['ok' => false, 'status' => 'pending', 'message' => 'Bing not verified yet — ensure the meta tag is live on your site (the WP plugin serves it), then Verify.'];
+        $throttled = !$verified && stripos((string) $vr['error'], 'throttl') !== false;
+        $detail = $verified
+            ? 'Verified — direct URL submission + stats enabled.'
+            : ($throttled
+                ? 'Bing is rate-limiting verification right now — it will retry automatically (your meta tag is live, nothing to do).'
+                : ('Not verified yet' . ($vr['error'] !== '' ? ': ' . $vr['error'] : ' — make sure the msvalidate meta tag is live on your site, then retry.')));
+        SearchConnection::setStatus((int) $site['id'], 'bing', $verified ? 'verified' : 'pending', $detail);
+        if ($verified) {
+            return ['ok' => true, 'status' => 'verified', 'message' => 'Bing ownership verified — direct submission + stats enabled.'];
+        }
+        if ($throttled) {
+            return ['ok' => false, 'status' => 'pending', 'throttled' => true, 'message' => 'Bing is temporarily rate-limiting requests — verification will retry automatically shortly. No action needed (your meta tag is live).'];
+        }
+        return ['ok' => false, 'status' => 'pending', 'message' => 'Bing not verified yet — ensure the meta tag is live on your site (the WP plugin serves it), then Verify.'];
     }
 
     /**
@@ -376,6 +379,11 @@ final class SearchService
                         : self::verifyBing($site);
                     if (($res['status'] ?? '') === 'verified') {
                         $out[] = ucfirst($provider) . ': ' . ($site['name'] ?? ('site ' . $conn['site_id'])) . ' verified.';
+                    } elseif ($provider === 'bing' && !empty($res['throttled'])) {
+                        // Bing is rate-limiting us; stop hammering it this run
+                        // (the next cron run retries once the throttle clears).
+                        $out[] = 'Bing rate-limited — backing off, will retry next run.';
+                        break;
                     }
                 } catch (\Throwable $e) {
                     // best-effort; the next run retries.
