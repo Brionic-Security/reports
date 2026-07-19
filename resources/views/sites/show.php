@@ -97,7 +97,18 @@ $this->layout('layout', ['title' => $site['name'] . ' settings · Brionic Report
       <?= csrf_field() ?>
       <div class="field"><label>Name</label><input class="input" name="name" value="<?= e($site['name']) ?>" required></div>
       <div class="field"><label>Domain</label><input class="input" name="domain" value="<?= e($site['domain']) ?>" required></div>
-      <div class="field"><label>Weekly report recipients <span class="muted">(one email per line)</span></label><textarea class="input" name="report_email" rows="3" placeholder="client@acme.com&#10;you@agency.com"><?= e($site['report_email'] ?? '') ?></textarea></div>
+      <div class="field">
+        <label>Weekly report recipients</label>
+        <div class="recip" data-recip>
+          <div class="recip-chips" data-recip-chips></div>
+          <div class="recip-add">
+            <input type="email" class="input" data-recip-input placeholder="name@example.com" autocomplete="off">
+            <button type="button" class="btn btn-sm" data-recip-add>Add</button>
+          </div>
+          <textarea class="input recip-fallback" name="report_email" rows="2" data-recip-data placeholder="client@acme.com&#10;you@agency.com"><?= e($site['report_email'] ?? '') ?></textarea>
+          <p class="muted" style="font-size:.78rem;margin:6px 0 0">Each address receives the weekly report. Type an email and press <strong>Add</strong> (or Enter); click &times; to remove.</p>
+        </div>
+      </div>
       <div class="field">
         <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
           <input type="checkbox" name="monitor_enabled" value="1" <?= (int) ($site['monitor_enabled'] ?? 1) === 1 ? 'checked' : '' ?>>
@@ -310,5 +321,64 @@ $this->layout('layout', ['title' => $site['name'] . ' settings · Brionic Report
     </table>
   <?php endif; ?>
 </div>
+
+<script>
+(function () {
+  var EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  function parse(v) {
+    return (v || '').split(/[\s,;]+/).map(function (s) { return s.trim().toLowerCase(); }).filter(Boolean);
+  }
+  document.querySelectorAll('[data-recip]').forEach(function (root) {
+    var data  = root.querySelector('[data-recip-data]');
+    var chips = root.querySelector('[data-recip-chips]');
+    var input = root.querySelector('[data-recip-input]');
+    var addBtn = root.querySelector('[data-recip-add]');
+    if (!data || !chips || !input || !addBtn) { return; }
+    var list = parse(data.value);
+    data.classList.add('is-enhanced');
+    function sync() { data.value = list.join('\n'); render(); }
+    function render() {
+      chips.innerHTML = '';
+      if (list.length === 0) {
+        var empty = document.createElement('span');
+        empty.className = 'recip-empty';
+        empty.textContent = 'No recipients yet.';
+        chips.appendChild(empty);
+        return;
+      }
+      list.forEach(function (email, i) {
+        var chip = document.createElement('span');
+        chip.className = 'recip-chip';
+        var label = document.createElement('span');
+        label.textContent = email;
+        chip.appendChild(label);
+        var x = document.createElement('button');
+        x.type = 'button';
+        x.className = 'recip-x';
+        x.setAttribute('aria-label', 'Remove ' + email);
+        x.innerHTML = '&times;';
+        x.addEventListener('click', function () { list.splice(i, 1); sync(); });
+        chip.appendChild(x);
+        chips.appendChild(chip);
+      });
+    }
+    function add() {
+      var v = (input.value || '').trim().toLowerCase();
+      if (!v) { return; }
+      if (!EMAIL.test(v)) { input.classList.add('is-error'); return; }
+      input.classList.remove('is-error');
+      if (list.indexOf(v) === -1) { list.push(v); sync(); }
+      input.value = '';
+      input.focus();
+    }
+    addBtn.addEventListener('click', add);
+    input.addEventListener('keydown', function (ev) {
+      if (ev.key === 'Enter' || ev.key === ',') { ev.preventDefault(); add(); }
+    });
+    input.addEventListener('input', function () { input.classList.remove('is-error'); });
+    render();
+  });
+})();
+</script>
 
 <?php $this->stop(); ?>
