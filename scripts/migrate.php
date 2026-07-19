@@ -54,11 +54,17 @@ foreach ($files as $file) {
             $pdo->exec($statement);
         }
         Database::insert('INSERT INTO migrations (name, applied_at) VALUES (?, ?)', [$name, gmdate('Y-m-d H:i:s')]);
-        $pdo->commit();
+        // MySQL DDL (ALTER/CREATE) implicitly commits, ending the transaction —
+        // only commit if one is still active to avoid a spurious fatal.
+        if ($pdo->inTransaction()) {
+            $pdo->commit();
+        }
         echo "done\n";
         $ran++;
     } catch (\Throwable $e) {
-        $pdo->rollBack();
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
         echo "FAILED\n";
         fwrite(STDERR, $e->getMessage() . "\n");
         exit(1);
