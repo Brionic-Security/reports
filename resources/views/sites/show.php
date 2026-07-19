@@ -339,7 +339,7 @@ $this->layout('layout', ['title' => $site['name'] . ' settings · Brionic Report
   function parse(v) {
     return (v || '').split(/[\s,;]+/).map(function (s) { return s.trim(); }).filter(Boolean);
   }
-  document.querySelectorAll('[data-chips]').forEach(function (root) {
+  function enhance(root) {
     var kind = root.getAttribute('data-chip-kind') || 'email';
     var emptyText = root.getAttribute('data-chip-empty') || 'None yet.';
     var data  = root.querySelector('[data-chip-data]');
@@ -351,7 +351,8 @@ $this->layout('layout', ['title' => $site['name'] . ' settings · Brionic Report
     data.classList.add('is-enhanced');
     function normalize(v) { return kind === 'email' ? v.toLowerCase() : v; }
     function valid(v) { return kind === 'email' ? EMAIL.test(v) : (v.length > 0 && v.indexOf(' ') === -1); }
-    function sync() { data.value = list.join('\n'); render(); }
+    function commit() { data.value = list.join('\n'); }
+    function sync() { commit(); render(); }
     function render() {
       chips.innerHTML = '';
       if (list.length === 0) {
@@ -392,7 +393,19 @@ $this->layout('layout', ['title' => $site['name'] . ' settings · Brionic Report
       if (ev.key === 'Enter' || ev.key === ',') { ev.preventDefault(); add(); }
     });
     input.addEventListener('input', function () { input.classList.remove('is-error'); });
+    // Guarantee the submitted textarea always matches the current chips.
+    var form = root.closest('form');
+    if (form) { form.addEventListener('submit', commit); }
     render();
+  }
+  document.querySelectorAll('[data-chips]').forEach(function (root) {
+    try {
+      enhance(root);
+    } catch (e) {
+      // Never let one editor break another; leave a usable textarea fallback.
+      var d = root.querySelector('[data-chip-data]');
+      if (d) { d.classList.remove('is-enhanced'); }
+    }
   });
 })();
 </script>
