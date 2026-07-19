@@ -279,3 +279,5 @@ code { background: var(--panel-2); border-radius: 5px; padding: 1px 5px; font: .
 .recip-add { display: flex; gap: 8px; }
 .recip-add .input { flex: 1; }
 .input.is-error { border-color: var(--accent); }
+
+.recip-chip > span:first-child { max-width: 340px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

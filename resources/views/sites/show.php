@@ -99,13 +99,13 @@ $this->layout('layout', ['title' => $site['name'] . ' settings · Brionic Report
       <div class="field"><label>Domain</label><input class="input" name="domain" value="<?= e($site['domain']) ?>" required></div>
       <div class="field">
         <label>Weekly report recipients</label>
-        <div class="recip" data-recip>
-          <div class="recip-chips" data-recip-chips></div>
+        <div class="recip" data-chips data-chip-kind="email" data-chip-empty="No recipients yet.">
+          <div class="recip-chips" data-chip-list></div>
           <div class="recip-add">
-            <input type="email" class="input" data-recip-input placeholder="name@example.com" autocomplete="off">
-            <button type="button" class="btn btn-sm" data-recip-add>Add</button>
+            <input type="email" class="input" data-chip-input placeholder="name@example.com" autocomplete="off">
+            <button type="button" class="btn btn-sm" data-chip-add>Add</button>
           </div>
-          <textarea class="input recip-fallback" name="report_email" rows="2" data-recip-data placeholder="client@acme.com&#10;you@agency.com"><?= e($site['report_email'] ?? '') ?></textarea>
+          <textarea class="input recip-fallback" name="report_email" rows="2" data-chip-data placeholder="client@acme.com&#10;you@agency.com"><?= e($site['report_email'] ?? '') ?></textarea>
           <p class="muted" style="font-size:.78rem;margin:6px 0 0">Each address receives the weekly report. Type an email and press <strong>Add</strong> (or Enter); click &times; to remove.</p>
         </div>
       </div>
@@ -212,10 +212,17 @@ $this->layout('layout', ['title' => $site['name'] . ' settings · Brionic Report
   <div class="grid">
     <div>
       <h3 style="margin:0 0 8px">Request indexing</h3>
-      <p class="muted" style="margin-top:0;font-size:.85rem">Google always gets your full sitemap. The pages below (pre-filled from your sitemap) are pushed to Bing + IndexNow &mdash; edit or add any, or clear the box to submit just the homepage. One URL or path per line.</p>
+      <p class="muted" style="margin-top:0;font-size:.85rem">Google always gets your full sitemap. The pages below (pre-filled from your sitemap) are pushed to Bing + IndexNow &mdash; add or remove any, or clear them to submit just the homepage.</p>
       <form method="post" action="<?= app_url('sites/' . $site['id'] . '/search/index') ?>">
         <?= csrf_field() ?>
-        <textarea class="input" name="urls" rows="6" placeholder="/&#10;/blog/new-post&#10;https://<?= e($site['domain']) ?>/pricing"><?= e($s['default_urls'] ?? '') ?></textarea>
+        <div class="recip" data-chips data-chip-kind="url" data-chip-empty="No pages added — the homepage will be submitted.">
+          <div class="recip-chips" data-chip-list></div>
+          <div class="recip-add">
+            <input type="text" class="input" data-chip-input placeholder="/blog/new-post or https://<?= e($site['domain']) ?>/pricing" autocomplete="off">
+            <button type="button" class="btn btn-sm" data-chip-add>Add</button>
+          </div>
+          <textarea class="input recip-fallback" name="urls" rows="4" data-chip-data placeholder="/&#10;/blog/new-post"><?= e($s['default_urls'] ?? '') ?></textarea>
+        </div>
         <button class="btn btn-primary btn-sm mt" type="submit">&#9889; Request indexing now</button>
       </form>
       <?php if (!empty($index_result)): ?>
@@ -326,36 +333,41 @@ $this->layout('layout', ['title' => $site['name'] . ' settings · Brionic Report
 (function () {
   var EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   function parse(v) {
-    return (v || '').split(/[\s,;]+/).map(function (s) { return s.trim().toLowerCase(); }).filter(Boolean);
+    return (v || '').split(/[\s,;]+/).map(function (s) { return s.trim(); }).filter(Boolean);
   }
-  document.querySelectorAll('[data-recip]').forEach(function (root) {
-    var data  = root.querySelector('[data-recip-data]');
-    var chips = root.querySelector('[data-recip-chips]');
-    var input = root.querySelector('[data-recip-input]');
-    var addBtn = root.querySelector('[data-recip-add]');
+  document.querySelectorAll('[data-chips]').forEach(function (root) {
+    var kind = root.getAttribute('data-chip-kind') || 'email';
+    var emptyText = root.getAttribute('data-chip-empty') || 'None yet.';
+    var data  = root.querySelector('[data-chip-data]');
+    var chips = root.querySelector('[data-chip-list]');
+    var input = root.querySelector('[data-chip-input]');
+    var addBtn = root.querySelector('[data-chip-add]');
     if (!data || !chips || !input || !addBtn) { return; }
     var list = parse(data.value);
     data.classList.add('is-enhanced');
+    function normalize(v) { return kind === 'email' ? v.toLowerCase() : v; }
+    function valid(v) { return kind === 'email' ? EMAIL.test(v) : (v.length > 0 && v.indexOf(' ') === -1); }
     function sync() { data.value = list.join('\n'); render(); }
     function render() {
       chips.innerHTML = '';
       if (list.length === 0) {
         var empty = document.createElement('span');
         empty.className = 'recip-empty';
-        empty.textContent = 'No recipients yet.';
+        empty.textContent = emptyText;
         chips.appendChild(empty);
         return;
       }
-      list.forEach(function (email, i) {
+      list.forEach(function (item, i) {
         var chip = document.createElement('span');
         chip.className = 'recip-chip';
         var label = document.createElement('span');
-        label.textContent = email;
+        label.textContent = item;
+        label.title = item;
         chip.appendChild(label);
         var x = document.createElement('button');
         x.type = 'button';
         x.className = 'recip-x';
-        x.setAttribute('aria-label', 'Remove ' + email);
+        x.setAttribute('aria-label', 'Remove ' + item);
         x.innerHTML = '&times;';
         x.addEventListener('click', function () { list.splice(i, 1); sync(); });
         chip.appendChild(x);
@@ -363,9 +375,9 @@ $this->layout('layout', ['title' => $site['name'] . ' settings · Brionic Report
       });
     }
     function add() {
-      var v = (input.value || '').trim().toLowerCase();
+      var v = normalize((input.value || '').trim());
       if (!v) { return; }
-      if (!EMAIL.test(v)) { input.classList.add('is-error'); return; }
+      if (!valid(v)) { input.classList.add('is-error'); return; }
       input.classList.remove('is-error');
       if (list.indexOf(v) === -1) { list.push(v); sync(); }
       input.value = '';
