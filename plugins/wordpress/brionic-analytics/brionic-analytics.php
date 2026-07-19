@@ -3,7 +3,7 @@
  * Plugin Name:       Brionic Config
  * Plugin URI:        https://reports.brionicsecurity.com
  * Description:       Brionic all-in-one WordPress config: analytics, SEO, search-engine verification (Google Search Console + IndexNow), email controls, automatic-update management, a branded login page, an under-construction mode, and cache tools — one plugin for your Brionic-managed site.
- * Version:           1.5.0
+ * Version:           1.5.1
  * Author:            Brionic Security
  * Author URI:        https://brionicsecurity.com
  * License:           MIT
@@ -47,6 +47,10 @@ register_activation_hook(__FILE__, function () {
     // Drop any cached search tags so an updated/just-activated plugin fetches
     // fresh verification tokens from Reports immediately (no stale-empty wait).
     delete_transient('brionic_search_tags');
+    // Pull tokens now so the verification tags + IndexNow key file are ready.
+    if (function_exists('brionic_search_tags')) {
+        brionic_search_tags();
+    }
 });
 
 /** Inject the tracker into the <head> of every front-end page. */
@@ -134,7 +138,9 @@ function brionic_search_tags() {
     }
     $cached = get_transient('brionic_search_tags');
     if (is_array($cached)) {
-        return array_merge($empty, $cached);
+        $tags = array_merge($empty, $cached);
+        brionic_search_side_effects($tags);
+        return $tags;
     }
     $tags = $empty;
     $url = brionic_analytics_base() . '/api/search-tags?key=' . rawurlencode($key);
@@ -154,7 +160,50 @@ function brionic_search_tags() {
     // result briefly so newly-connected sites pick up their token quickly.
     $hasTokens = $tags['google_meta'] !== '' || $tags['bing_meta'] !== '' || $tags['indexnow_key'] !== '';
     set_transient('brionic_search_tags', $tags, $hasTokens ? 6 * HOUR_IN_SECONDS : 5 * MINUTE_IN_SECONDS);
+    brionic_search_side_effects($tags);
     return $tags;
+}
+
+/**
+ * Side effects for the fetched search tags: keep the IndexNow key file present
+ * (served statically on hosts that don't route .txt through WordPress, e.g.
+ * SiteGround), and purge caches once the verification tokens first appear so
+ * they show up on pages that were cached before the tokens existed.
+ */
+function brionic_search_side_effects($tags) {
+    if (!empty($tags['indexnow_key'])) {
+        brionic_ensure_indexnow_file((string) $tags['indexnow_key']);
+    }
+    $sig = md5((string) ($tags['google_meta'] ?? '') . '|' . (string) ($tags['bing_meta'] ?? '') . '|' . (string) ($tags['indexnow_key'] ?? ''));
+    if ($sig !== (string) get_option('brionic_search_sig', '')) {
+        update_option('brionic_search_sig', $sig);
+        if (function_exists('brionic_cache_flush')) {
+            brionic_cache_flush();
+        }
+    }
+}
+
+/**
+ * Write the IndexNow key as a real file in the site root so it is served even on
+ * hosts that serve .txt directly (bypassing WordPress rewrites, e.g. SiteGround).
+ */
+function brionic_ensure_indexnow_file($key) {
+    if (!preg_match('/^[a-f0-9]{8,64}$/i', (string) $key)) {
+        return;
+    }
+    $root = untrailingslashit(ABSPATH);
+    $path = $root . '/' . $key . '.txt';
+    $written = (string) get_option('brionic_indexnow_file', '');
+    if ($written === $path && is_file($path)) {
+        return;
+    }
+    // Remove a previously-written key file when the key changed.
+    if ($written !== '' && $written !== $path && is_file($written)) {
+        @unlink($written);
+    }
+    if (@file_put_contents($path, $key) !== false) {
+        update_option('brionic_indexnow_file', $path);
+    }
 }
 
 /** Inject the Google + Bing ownership meta tags into <head>. */
