@@ -393,9 +393,16 @@ $this->layout('layout', ['title' => $site['name'] . ' settings · Brionic Report
       if (ev.key === 'Enter' || ev.key === ',') { ev.preventDefault(); add(); }
     });
     input.addEventListener('input', function () { input.classList.remove('is-error'); });
-    // Guarantee the submitted textarea always matches the current chips.
+    // Guarantee the submitted textarea always matches the current chips, and
+    // disable the submit button so the action can't be double-fired.
     var form = root.closest('form');
-    if (form) { form.addEventListener('submit', commit); }
+    if (form) {
+      form.addEventListener('submit', function () {
+        commit();
+        var btn = form.querySelector('[type="submit"]');
+        if (btn) { btn.disabled = true; btn.style.opacity = '0.6'; btn.style.cursor = 'default'; }
+      });
+    }
     render();
   }
   document.querySelectorAll('[data-chips]').forEach(function (root) {

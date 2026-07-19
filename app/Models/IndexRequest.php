@@ -58,4 +58,12 @@ final class IndexRequest
         $sql .= ' ORDER BY id DESC LIMIT 1';
         return Database::selectOne($sql, $params);
     }
+
+    /** Timestamp of the most recent indexing request for a site (any provider). */
+    public static function lastAt(int $siteId): ?string
+    {
+        $row = Database::selectOne('SELECT MAX(created_at) AS mx FROM index_requests WHERE site_id = ?', [$siteId]);
+        $mx = $row['mx'] ?? null;
+        return ($mx !== null && $mx !== '') ? (string) $mx : null;
+    }
 }

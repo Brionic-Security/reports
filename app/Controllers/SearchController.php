@@ -127,6 +127,17 @@ final class SearchController
         // Remember the operator's edited list so removals/additions persist
         // across reloads (otherwise the sitemap pre-fill re-adds them).
         \App\Models\Site::updateIndexUrls((int) $site['id'], $urlsRaw);
+
+        // Cooldown: avoid accidental re-clicks spamming the engines / burning
+        // Bing's daily URL-submission quota. The URL list is still saved above.
+        $last = \App\Models\IndexRequest::lastAt((int) $site['id']);
+        if ($last !== null) {
+            $elapsed = time() - (int) strtotime($last . ' UTC');
+            if ($elapsed >= 0 && $elapsed < 60) {
+                Session::flash('index_result', 'Indexing was just requested ' . $elapsed . 's ago — please wait a moment before requesting again. Your page list has been saved.');
+                return Response::redirect(app_url('sites/' . $site['id'] . '/settings#search'));
+            }
+        }
         $urls = [];
         foreach (preg_split('/\s+/', $urlsRaw) ?: [] as $u) {
             $u = trim($u);
