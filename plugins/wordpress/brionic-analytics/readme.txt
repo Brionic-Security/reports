@@ -3,7 +3,7 @@ Contributors: brionicsecurity
 Tags: analytics, privacy, statistics, stats
 Requires at least: 5.0
 Requires PHP: 7.2
-Stable tag: 1.5.1
+Stable tag: 1.5.2
 License: MIT
 
 Privacy-first website analytics by Brionic Reports. No cookies, no personal data.

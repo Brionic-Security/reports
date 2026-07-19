@@ -193,3 +193,23 @@ if (!function_exists('date_range_bounds')) {
         return [null, null, 'all'];
     }
 }
+
+if (!function_exists('plugin_version')) {
+    /** Current WordPress plugin version, read from its main file header. */
+    function plugin_version(): string
+    {
+        static $v = null;
+        if ($v !== null) {
+            return $v;
+        }
+        $v = '';
+        $file = base_path('plugins/wordpress/brionic-analytics/brionic-analytics.php');
+        if (is_file($file)) {
+            $head = (string) file_get_contents($file, false, null, 0, 4096);
+            if (preg_match('/^\s*\*\s*Version:\s*(.+)$/mi', $head, $m)) {
+                $v = trim($m[1]);
+            }
+        }
+        return $v;
+    }
+}

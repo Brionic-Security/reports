@@ -67,6 +67,7 @@ $this->layout('layout', ['title' => $site['name'] . ' settings · Brionic Report
       <h3><span class="cm-num">1</span> WordPress <?php if ($conn['wordpress'] > 0): ?><span class="cm-badge">&#10003; Connected</span><?php else: ?><span class="cm-tag">easiest</span><?php endif; ?></h3>
       <p class="muted">Your site key is baked into the download. In WordPress go to <strong>Plugins &rarr; Add New &rarr; Upload Plugin</strong>, upload the file, then click <strong>Activate</strong>.</p>
       <a class="btn btn-primary btn-sm" href="<?= app_url('sites/' . $site['id'] . '/plugin.zip') ?>">&#8681; Download WordPress plugin</a>
+      <?php $pv = plugin_version(); if ($pv !== ''): ?><span class="muted" style="font-size:.78rem;margin-left:8px">Plugin v<?= e($pv) ?></span><?php endif; ?>
     </div>
 
     <div class="connect-method <?= $conn['snippet'] > 0 ? 'is-connected' : '' ?>">

@@ -3,7 +3,7 @@
  * Plugin Name:       Brionic Config
  * Plugin URI:        https://reports.brionicsecurity.com
  * Description:       Brionic all-in-one WordPress config: analytics, SEO, search-engine verification (Google Search Console + IndexNow), email controls, automatic-update management, a branded login page, an under-construction mode, and cache tools — one plugin for your Brionic-managed site.
- * Version:           1.5.1
+ * Version:           1.5.2
  * Author:            Brionic Security
  * Author URI:        https://brionicsecurity.com
  * License:           MIT
@@ -979,8 +979,12 @@ function brionic_analytics_settings_page() {
     $tab = (isset($_GET['tab']) && isset($tabs[$_GET['tab']])) ? sanitize_key($_GET['tab']) : 'analytics';
     $tabBase = admin_url('options-general.php?page=brionic-analytics');
     ?>
+    <?php $brionic_ver = function_exists('get_file_data') ? trim((string) (get_file_data(__FILE__, ['v' => 'Version'])['v'] ?? '')) : ''; ?>
     <div class="wrap">
-        <h1>Brionic Config</h1>
+        <h1 style="display:flex;align-items:center;gap:12px;margin-bottom:8px">
+            <img src="<?php echo esc_url(plugins_url('assets/login-logo.png', __FILE__)); ?>" alt="Brionic Reports" style="height:36px;width:auto">
+            <span>Brionic Config<?php if ($brionic_ver !== ''): ?> <span style="font-size:12px;font-weight:400;color:#6e6e73;vertical-align:middle">v<?php echo esc_html($brionic_ver); ?></span><?php endif; ?></span>
+        </h1>
         <h2 class="nav-tab-wrapper">
             <?php foreach ($tabs as $tk => $tlabel): ?>
                 <a href="<?php echo esc_url($tabBase . '&tab=' . $tk); ?>" class="nav-tab <?php echo $tab === $tk ? 'nav-tab-active' : ''; ?>"><?php echo esc_html($tlabel); ?></a>

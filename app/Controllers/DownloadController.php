@@ -60,9 +60,17 @@ final class DownloadController
         $body = (string) file_get_contents($tmp);
         @unlink($tmp);
 
+        // Name the download after the site + plugin version, e.g. socalsc-brionic-plugin-1.5.1.zip
+        $version = plugin_version();
+        $slug = trim((string) preg_replace('/[^a-z0-9]+/i', '-', strtolower((string) $site['name'])), '-');
+        if ($slug === '') {
+            $slug = 'site';
+        }
+        $filename = $slug . '-brionic-plugin' . ($version !== '' ? '-' . $version : '') . '.zip';
+
         return new Response($body, 200, [
             'Content-Type'        => 'application/zip',
-            'Content-Disposition' => 'attachment; filename="brionic-analytics.zip"',
+            'Content-Disposition' => 'attachment; filename="' . $filename . '"',
             'Content-Length'      => (string) strlen($body),
         ]);
     }
