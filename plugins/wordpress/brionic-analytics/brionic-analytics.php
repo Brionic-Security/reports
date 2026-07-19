@@ -3,7 +3,7 @@
  * Plugin Name:       Brionic Config
  * Plugin URI:        https://reports.brionicsecurity.com
  * Description:       Brionic all-in-one WordPress config: analytics, SEO, search-engine verification (Google Search Console + IndexNow), email controls, automatic-update management, a branded login page, an under-construction mode, and cache tools — one plugin for your Brionic-managed site.
- * Version:           1.5.2
+ * Version:           1.5.3
  * Author:            Brionic Security
  * Author URI:        https://brionicsecurity.com
  * License:           MIT
@@ -359,17 +359,20 @@ add_action('automatic_updates_complete', function ($results) {
     if (!$lines) {
         return;
     }
-    $site = get_bloginfo('name');
-    $to = brionic_email_list(get_option('brionic_au_notify_email', ''));
-    if (!$to) {
-        $to = [(string) get_option('admin_email')];
+    // Send the summary to the recipients configured in Brionic Reports
+    // (managed centrally in the dashboard, not in this plugin).
+    $key = brionic_analytics_key();
+    if (strncmp($key, 'site_', 5) !== 0) {
+        return;
     }
-    wp_mail(
-        $to,
-        'Automatic updates installed on ' . $site,
-        'The automatic updater ran on ' . $site . ' (' . home_url() . "):\n\n"
-        . implode("\n", $lines) . "\n\n— Brionic Reports"
-    );
+    wp_remote_post(brionic_analytics_base() . '/api/plugin-notify?key=' . rawurlencode($key), array(
+        'timeout'  => 15,
+        'blocking' => false,
+        'body'     => array(
+            'title'   => 'Automatic updates installed on ' . get_bloginfo('name'),
+            'summary' => implode("\n", $lines),
+        ),
+    ));
 });
 
 // ── Login page branding ─────────────────────────────────────────────────────
@@ -887,7 +890,6 @@ function brionic_analytics_settings_page() {
         update_option('brionic_au_themes',     isset($_POST['brionic_au_themes']) ? '1' : '0');
         update_option('brionic_au_notify',     isset($_POST['brionic_au_notify']) ? '1' : '0');
         update_option('brionic_au_quiet',      isset($_POST['brionic_au_quiet']) ? '1' : '0');
-        update_option('brionic_au_notify_email', implode(', ', brionic_email_list(wp_unslash($_POST['brionic_au_notify_email'] ?? ''))));
         echo '<div class="notice notice-success is-dismissible"><p>Update settings saved.</p></div>';
     }
 
@@ -946,7 +948,6 @@ function brionic_analytics_settings_page() {
     $auThemes    = get_option('brionic_au_themes', '0') === '1';
     $auNotify    = get_option('brionic_au_notify', '1') === '1';
     $auQuiet     = get_option('brionic_au_quiet', '0') === '1';
-    $auEmail     = (string) get_option('brionic_au_notify_email', '');
     $loginOn     = get_option('brionic_login_enabled', '1') === '1';
     $loginLogo   = (string) get_option('brionic_login_logo_url', '');
     $loginBg     = (string) get_option('brionic_login_bg_url', '');
@@ -1129,7 +1130,7 @@ function brionic_analytics_settings_page() {
 
         <?php elseif ($tab === 'updates'): ?>
         <h2>Automatic updates</h2>
-        <p>Choose what installs automatically and get an email summary when the updater runs.</p>
+        <p>Choose what installs automatically. A summary is emailed to your <strong>Brionic Reports</strong> weekly-report recipients (managed in your Reports dashboard) after the updater runs.</p>
         <form action="" method="post">
             <?php wp_nonce_field('brionic_au_save'); ?>
             <input type="hidden" name="brionic_au_save" value="1">
@@ -1141,12 +1142,9 @@ function brionic_analytics_settings_page() {
                     <label><input type="checkbox" name="brionic_au_themes" <?php checked($auThemes); ?>> All themes</label>
                 </td></tr>
                 <tr><th scope="row">Notifications</th><td>
-                    <label><input type="checkbox" name="brionic_au_notify" <?php checked($auNotify); ?>> Email me a summary after automatic updates run</label><br>
+                    <label><input type="checkbox" name="brionic_au_notify" <?php checked($auNotify); ?>> Send an update summary to my Brionic Reports recipients after automatic updates run</label><br>
                     <label><input type="checkbox" name="brionic_au_quiet" <?php checked($auQuiet); ?>> Silence WordPress&rsquo;s own core-update emails (use Brionic&rsquo;s instead)</label>
-                </td></tr>
-                <tr><th scope="row"><label for="brionic_au_notify_email">Notify address(es)</label></th><td>
-                    <input type="text" class="regular-text" id="brionic_au_notify_email" name="brionic_au_notify_email" value="<?php echo esc_attr($auEmail); ?>" placeholder="<?php echo esc_attr($adminEmail); ?>">
-                    <p class="description">Where update summaries go (sent using the email settings above). You can enter <strong>multiple addresses separated by commas</strong>. Uses the admin email if blank.</p>
+                    <p class="description">Summaries go to the weekly-report recipients configured for this site in your <strong>Brionic Reports</strong> dashboard &mdash; no addresses to manage here.</p>
                 </td></tr>
             </table>
             <?php submit_button('Save update settings'); ?>

@@ -31,6 +31,10 @@ return function (Router $router): void {
     $router->get('/api/verify', [CollectController::class, 'verify']);
     $router->post('/api/verify', [CollectController::class, 'verify']);
 
+    // Plugin maintenance notices (e.g. auto-update summaries) → emailed to the
+    // site's weekly-report recipients (managed in the dashboard).
+    $router->post('/api/plugin-notify', [CollectController::class, 'pluginNotify']);
+
     // Search-engine verification tags + IndexNow key for the WordPress plugin.
     $router->get('/api/search-tags', [SearchController::class, 'siteTags']);
 

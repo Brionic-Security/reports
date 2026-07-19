@@ -152,6 +152,37 @@ final class Email
         return self::shell($subject, $body, $text);
     }
 
+    /**
+     * Maintenance notice from a connected site's plugin (e.g. after WordPress
+     * auto-updates). $items are already-sanitised plaintext lines like
+     * "[OK] Plugin: Name v1.2".
+     *
+     * @param string[] $items
+     * @return array{subject:string,html:string,text:string}
+     */
+    public static function maintenanceNotice(array $site, string $eventTitle, array $items): array
+    {
+        $name = self::esc((string) $site['name']);
+        $domain = self::esc((string) $site['domain']);
+        $rows = '';
+        foreach ($items as $line) {
+            $line = (string) $line;
+            $failed = stripos($line, '[FAILED]') !== false;
+            $clean = trim((string) preg_replace('/^\s*\[(OK|FAILED)\]\s*/i', '', $line));
+            $color = $failed ? self::RED : self::GREEN;
+            $icon = $failed ? '&#10007;' : '&#10003;';
+            $rows .= '<tr><td style="padding:7px 0;border-bottom:1px solid #eee;font-size:14px;color:#1d1d1f;">'
+                . '<span style="color:' . $color . ';font-weight:700;">' . $icon . '</span>&nbsp; '
+                . self::esc($clean) . '</td></tr>';
+        }
+        $body = self::p('<strong>' . $name . '</strong> (' . $domain . ') &mdash; ' . self::esc($eventTitle) . '.')
+            . '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:8px 0 16px;">' . $rows . '</table>'
+            . self::pMuted('Automated maintenance notice from your Brionic Reports account. Recipients are managed in your Reports dashboard.');
+        $subject = $eventTitle . ' — ' . (string) $site['name'];
+        $text = $eventTitle . ' on ' . (string) $site['name'] . ' (' . (string) $site['domain'] . "):\n\n" . implode("\n", $items) . "\n";
+        return self::shell($subject, $body, $text);
+    }
+
     // ── layout pieces ─────────────────────────────────────────────────────────
 
     /** @param array<int,array{0:string,1:int,2:string}> $items */
