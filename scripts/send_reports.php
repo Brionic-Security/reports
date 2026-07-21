@@ -34,13 +34,14 @@ $force = isset($opts['force']);
 $test = isset($opts['test']) && is_string($opts['test']) ? $opts['test'] : null;
 $onlySite = isset($opts['site']) ? (int) $opts['site'] : null;
 
-// Weekly cadence: the automated run only sends on the report day (default Friday).
+// Weekly cadence: the automated run only sends on the report day (default Friday, Pacific time).
 // Explicit invocations (--force, --test, --site) always send regardless of day.
 $reportDay = isset($opts['day']) ? max(1, min(7, (int) $opts['day'])) : 5; // ISO-8601: 1=Mon .. 5=Fri .. 7=Sun
 $bypassSchedule = $force || $test !== null || $onlySite !== null;
-if (!$bypassSchedule && (int) gmdate('N') !== $reportDay) {
+$todayPt = new DateTimeImmutable('now', new DateTimeZone('America/Los_Angeles'));
+if (!$bypassSchedule && (int) $todayPt->format('N') !== $reportDay) {
     $dayName = date('l', strtotime('Sunday +' . $reportDay . ' days'));
-    echo "Skipping: weekly reports send on {$dayName} (today is " . gmdate('l') . " UTC). Use --force to override.\n";
+    echo "Skipping: weekly reports send on {$dayName} (today is " . $todayPt->format('l') . " PT). Use --force to override.\n";
     exit(0);
 }
 
