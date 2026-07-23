@@ -87,39 +87,6 @@ final class Email
         return self::shell($subject, $body, $text);
     }
 
-    /**
-     * A traffic spike/drop alert for the operator.
-     *
-     * @param array<string,mixed> $site
-     */
-    public static function trafficAlert(array $site, string $kind, int $yesterday, float $baseline, string $day): array
-    {
-        $name = self::esc((string) $site['name']);
-        $up = $kind === 'spike';
-        $color = $up ? self::RED : '#b45309';
-        $pct = $baseline > 0 ? (int) round(abs($yesterday - $baseline) / $baseline * 100) : 100;
-        $arrow = $up ? '&#9650;' : '&#9660;';
-        $headline = ($up ? 'up' : 'down') . ' ' . $pct . '% vs the 7-day average';
-
-        $body = self::p('Heads up — traffic on <strong>' . $name . '</strong> ('
-                . self::esc((string) $site['domain']) . ') ' . ($up ? 'spiked' : 'dropped')
-                . ' on ' . self::esc(date('M j, Y', strtotime($day))) . '.')
-            . '<div style="font-size:22px;font-weight:800;color:' . $color . ';margin:2px 0 16px;">'
-                . $arrow . ' ' . self::esc($headline) . '</div>'
-            . self::stats([
-                ['Yesterday', $yesterday, $color],
-                ['7-day average', (int) round($baseline), self::MUTED],
-            ])
-            . self::pMuted('Human page views only (bots excluded). Baseline is the average of the previous 7 days.');
-
-        $subject = ($up ? 'Traffic spike' : 'Traffic drop') . ' — ' . (string) $site['name']
-            . ' (' . ($up ? '+' : '-') . $pct . '%)';
-        $text = ($up ? 'Traffic spike' : 'Traffic drop') . " on {$site['name']} for {$day}: "
-            . "{$yesterday} views vs 7-day avg " . round($baseline, 1) . ".\n";
-
-        return self::shell($subject, $body, $text);
-    }
-
     /** Downtime / recovery alert for a monitored site. */
     public static function uptimeAlert(array $site, string $kind, int $status, string $error, int $ms): array
     {
