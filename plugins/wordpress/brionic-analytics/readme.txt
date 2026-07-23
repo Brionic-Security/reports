@@ -3,7 +3,7 @@ Contributors: brionicsecurity
 Tags: analytics, privacy, statistics, stats
 Requires at least: 5.0
 Requires PHP: 7.2
-Stable tag: 1.5.3
+Stable tag: 1.5.4
 License: MIT
 
 Privacy-first website analytics by Brionic Reports. No cookies, no personal data.
@@ -27,6 +27,9 @@ filled in. Just install and activate.
 That's it — analytics start flowing to your dashboard immediately.
 
 == Changelog ==
+
+= 1.5.4 =
+* SEO: enrich WooCommerce product listings with the fields Google flags on merchant listings — brand (global identifier), validFrom, hasMerchantReturnPolicy and shippingDetails. Brand and shipping are derived from the site itself (brand taxonomy / organisation name; WooCommerce base country & shipping zones; virtual/downloadable products treated as non-shipped). Return policy is configurable under Settings → Brionic Config → SEO.
 
 = 1.2.0 =
 * Added Automatic updates management (core minor/major, plugins, themes) with an email summary after the updater runs.

@@ -3,7 +3,7 @@
  * Plugin Name:       Brionic Config
  * Plugin URI:        https://reports.brionicsecurity.com
  * Description:       Brionic all-in-one WordPress config: analytics, SEO, search-engine verification (Google Search Console + IndexNow), email controls, automatic-update management, a branded login page, an under-construction mode, and cache tools — one plugin for your Brionic-managed site.
- * Version:           1.5.3
+ * Version:           1.5.4
  * Author:            Brionic Security
  * Author URI:        https://brionicsecurity.com
  * License:           MIT
@@ -767,6 +767,159 @@ function brionic_seo_schema_graph() {
     return ['@context' => 'https://schema.org', '@graph' => $graph];
 }
 
+// ── WooCommerce merchant listings ────────────────────────────────────────────
+// Enriches WooCommerce's own Product/Offer structured data with the fields
+// Google flags as missing on merchant listings — brand (global identifier),
+// validFrom, hasMerchantReturnPolicy and shippingDetails. Everything is derived
+// from the site itself (product brand taxonomy, store base country, shipping
+// zones, product type) so it works on ANY WordPress/WooCommerce site with no
+// hard-coded values. Augments the existing markup via WooCommerce's filter, so
+// there is never a duplicate Product block — and it works even when another SEO
+// plugin owns the rest of the tags.
+
+/** True when the WooCommerce product-schema enhancement should run. */
+function brionic_seo_wc_enhance_on() {
+    return class_exists('WooCommerce')
+        && get_option('brionic_seo_wc_enhance', '1') === '1';
+}
+
+/** The store's base country (ISO-2), from WooCommerce settings. Falls back to US. */
+function brionic_seo_wc_country() {
+    if (function_exists('wc_get_base_location')) {
+        $loc = wc_get_base_location();
+        if (!empty($loc['country'])) {
+            return $loc['country'];
+        }
+    }
+    return 'US';
+}
+
+/** Brand for a product: brand taxonomy → override → org/site name. */
+function brionic_seo_wc_brand($product) {
+    // Common WooCommerce brand taxonomies (native + popular plugins).
+    if ($product && function_exists('get_the_terms')) {
+        foreach (['product_brand', 'pwb-brand', 'yith_product_brand', 'berocket_brand'] as $tax) {
+            if (taxonomy_exists($tax)) {
+                $terms = get_the_terms($product->get_id(), $tax);
+                if ($terms && !is_wp_error($terms)) {
+                    return $terms[0]->name;
+                }
+            }
+        }
+    }
+    $brand = trim((string) get_option('brionic_seo_brand', ''));
+    if ($brand !== '') {
+        return $brand;
+    }
+    $org = trim((string) get_option('brionic_seo_org_name', ''));
+    return $org !== '' ? $org : get_bloginfo('name');
+}
+
+/** A schema.org MerchantReturnPolicy from the site's return settings. */
+function brionic_seo_wc_return_policy() {
+    $country = brionic_seo_wc_country();
+    if (get_option('brionic_seo_returns', 'window') === 'none') {
+        return [
+            '@type'                => 'MerchantReturnPolicy',
+            'applicableCountry'    => $country,
+            'returnPolicyCategory' => 'https://schema.org/MerchantReturnNotPermitted',
+        ];
+    }
+    $days = max(1, (int) get_option('brionic_seo_return_days', 30));
+    return [
+        '@type'                => 'MerchantReturnPolicy',
+        'applicableCountry'    => $country,
+        'returnPolicyCategory' => 'https://schema.org/MerchantReturnFiniteReturnWindow',
+        'merchantReturnDays'   => $days,
+        'returnMethod'         => 'https://schema.org/ReturnByMail',
+        'returnFees'           => 'https://schema.org/FreeReturn',
+    ];
+}
+
+/** OfferShippingDetails derived from the product type + WooCommerce shipping zones. */
+function brionic_seo_wc_shipping($product) {
+    $country  = brionic_seo_wc_country();
+    $currency = function_exists('get_woocommerce_currency') ? get_woocommerce_currency() : 'USD';
+
+    // Virtual/downloadable items (courses, services, digital goods) never ship.
+    $rate = 0.0;
+    $ships = !($product && ($product->is_virtual() || $product->is_downloadable()));
+
+    if ($ships && function_exists('WC') && WC()->shipping()) {
+        // Best-effort: inspect the store's shipping zones for the base country.
+        // A free-shipping method → 0; otherwise the first flat-rate cost we find.
+        $found = null;
+        if (class_exists('WC_Shipping_Zones')) {
+            foreach (WC_Shipping_Zones::get_zones() as $zone) {
+                foreach (($zone['shipping_methods'] ?? []) as $method) {
+                    if (!isset($method->enabled) || $method->enabled !== 'yes') {
+                        continue;
+                    }
+                    if ($method->id === 'free_shipping') {
+                        $found = 0.0;
+                        break 2;
+                    }
+                    if ($method->id === 'flat_rate' && isset($method->instance_settings['cost'])
+                        && is_numeric($method->instance_settings['cost'])) {
+                        $found = (float) $method->instance_settings['cost'];
+                    }
+                }
+            }
+        }
+        if ($found !== null) {
+            $rate = $found;
+        }
+    }
+
+    return [
+        '@type'               => 'OfferShippingDetails',
+        'shippingRate'        => [
+            '@type'    => 'MonetaryAmount',
+            'value'    => number_format($rate, 2, '.', ''),
+            'currency' => $currency,
+        ],
+        'shippingDestination' => [
+            '@type'          => 'DefinedRegion',
+            'addressCountry' => $country,
+        ],
+    ];
+}
+
+add_filter('woocommerce_structured_data_product', function ($markup, $product) {
+    if (!brionic_seo_wc_enhance_on() || empty($markup['offers']) || !is_array($markup['offers'])) {
+        return $markup;
+    }
+
+    if (empty($markup['brand'])) {
+        $brand = brionic_seo_wc_brand($product);
+        if ($brand !== '') {
+            $markup['brand'] = ['@type' => 'Brand', 'name' => $brand];
+        }
+    }
+
+    $return   = brionic_seo_wc_return_policy();
+    $shipping = brionic_seo_wc_shipping($product);
+    $created  = ($product && $product->get_date_created()) ? $product->get_date_created()->date('Y-m-d') : date('Y-m-d');
+
+    foreach ($markup['offers'] as &$offer) {
+        if (!is_array($offer)) {
+            continue;
+        }
+        if (($offer['@type'] ?? 'Offer') === 'Offer' && empty($offer['validFrom'])) {
+            $offer['validFrom'] = $created;
+        }
+        if ($return && empty($offer['hasMerchantReturnPolicy'])) {
+            $offer['hasMerchantReturnPolicy'] = $return;
+        }
+        if ($shipping && empty($offer['shippingDetails'])) {
+            $offer['shippingDetails'] = $shipping;
+        }
+    }
+    unset($offer);
+
+    return $markup;
+}, 20, 2);
+
 // Admin nudge: enabled but a competing SEO plugin is still active.
 add_action('admin_notices', function () {
     if (!current_user_can('manage_options')) {
@@ -932,6 +1085,10 @@ function brionic_analytics_settings_page() {
         update_option('brionic_seo_og_image', esc_url_raw(wp_unslash($_POST['brionic_seo_og_image'] ?? '')));
         update_option('brionic_seo_org_name', sanitize_text_field(wp_unslash($_POST['brionic_seo_org_name'] ?? '')));
         update_option('brionic_seo_org_logo', esc_url_raw(wp_unslash($_POST['brionic_seo_org_logo'] ?? '')));
+        update_option('brionic_seo_wc_enhance', isset($_POST['brionic_seo_wc_enhance']) ? '1' : '0');
+        update_option('brionic_seo_brand', sanitize_text_field(wp_unslash($_POST['brionic_seo_brand'] ?? '')));
+        update_option('brionic_seo_returns', (($_POST['brionic_seo_returns'] ?? 'window') === 'none') ? 'none' : 'window');
+        update_option('brionic_seo_return_days', max(1, (int) ($_POST['brionic_seo_return_days'] ?? 30)));
         echo '<div class="notice notice-success is-dismissible"><p>SEO settings saved.</p></div>';
     }
     $baked = (strncmp(BRIONIC_ANALYTICS_DEFAULT_KEY, 'site_', 5) === 0);
@@ -967,6 +1124,11 @@ function brionic_analytics_settings_page() {
     $seoOrgName  = (string) get_option('brionic_seo_org_name', '');
     $seoOrgLogo  = (string) get_option('brionic_seo_org_logo', '');
     $seoRival    = brionic_seo_competitor();
+    $seoWcOn     = get_option('brionic_seo_wc_enhance', '1') === '1';
+    $seoBrand    = (string) get_option('brionic_seo_brand', '');
+    $seoReturns  = get_option('brionic_seo_returns', 'window') === 'none' ? 'none' : 'window';
+    $seoRetDays  = (int) get_option('brionic_seo_return_days', 30);
+    $seoHasWoo   = class_exists('WooCommerce');
 
     $tabs = [
         'analytics'    => 'Analytics',
@@ -1085,6 +1247,28 @@ function brionic_analytics_settings_page() {
                     <p class="description">Logo URL for structured data (helps search engines show your brand).</p>
                 </td></tr>
             </table>
+            <?php if ($seoHasWoo): ?>
+            <h3 style="margin-top:24px">Product listings (WooCommerce)</h3>
+            <p class="description" style="max-width:640px">Fills in the fields Google flags on shop &amp; merchant listings — <strong>brand</strong>, <strong>return policy</strong> and <strong>shipping</strong> — by enriching WooCommerce&rsquo;s own product structured data. Brand and shipping are pulled from this site automatically (brand taxonomy or organisation name; shipping from your WooCommerce base country &amp; shipping zones, with virtual/downloadable products treated as non-shipped).</p>
+            <table class="form-table" role="presentation">
+                <tr><th scope="row">Enhance product schema</th><td>
+                    <label><input type="checkbox" name="brionic_seo_wc_enhance" <?php checked($seoWcOn); ?>> Add brand, validFrom, return policy &amp; shipping to WooCommerce product listings</label>
+                    <p class="description">On by default. Augments WooCommerce&rsquo;s existing markup — never a duplicate block.</p>
+                </td></tr>
+                <tr><th scope="row"><label for="brionic_seo_brand">Brand override</label></th><td>
+                    <input type="text" class="regular-text" id="brionic_seo_brand" name="brionic_seo_brand" value="<?php echo esc_attr($seoBrand); ?>" placeholder="Auto — from product brand or organisation name">
+                    <p class="description">Optional. Blank = your product&rsquo;s brand taxonomy, else the organisation/site name.</p>
+                </td></tr>
+                <tr><th scope="row"><label for="brionic_seo_returns">Return policy</label></th><td>
+                    <select id="brionic_seo_returns" name="brionic_seo_returns">
+                        <option value="window" <?php selected($seoReturns, 'window'); ?>>Returns accepted within a set number of days</option>
+                        <option value="none" <?php selected($seoReturns, 'none'); ?>>No returns accepted</option>
+                    </select>
+                    <label style="margin-left:10px">Days: <input type="number" min="1" max="365" class="small-text" name="brionic_seo_return_days" value="<?php echo esc_attr((string) $seoRetDays); ?>"></label>
+                    <p class="description">Applied to every product offer. The applicable country comes from your WooCommerce base location.</p>
+                </td></tr>
+            </table>
+            <?php endif; ?>
             <?php submit_button('Save SEO settings'); ?>
         </form>
 
